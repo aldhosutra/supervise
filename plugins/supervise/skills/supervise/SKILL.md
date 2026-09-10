@@ -140,11 +140,14 @@ step that resolves it:
 
 1. **Answer it yourself** from the project's own documents. A surprising number of "open
    questions" are already decided by a stated principle or an existing spec.
-2. **Research or measure it.** Search for the convention; better, measure the real answer if
-   the system can be asked directly. A measured number beats a cited one.
-3. **Only then bring it to the user** — with the research and a recommendation, never as a
-   bare question. Escalating an answerable question spends the attention this skill exists
-   to protect.
+2. **Search the web** for the convention, the published standard, or how the incumbents in
+   this space actually do it. Cite what you find so the decision can be re-examined later.
+3. **Measure it**, whenever the system can be asked directly. Query the API, read the
+   database, render the page, time the operation. A number you measured beats a number you
+   cited, and it is often faster to get.
+4. **Only then bring it to the user**, with the findings and a recommendation attached,
+   never as a bare question. Escalating an answerable question spends the attention this
+   skill exists to protect.
 
 Escalate immediately, without working the ladder, when the answer costs money, commits to a
 vendor, publishes something, or is a matter of taste the user owns.

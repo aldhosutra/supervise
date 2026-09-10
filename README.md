@@ -6,6 +6,11 @@ You give it a goal and walk away. `/supervise` turns one Claude Code session int
 for your others, as many as your machine will hold, running in tmux where you can watch every
 keystroke.
 
+The reason you can walk away is that it resolves their questions instead of forwarding them.
+When a session gets stuck on something undecided, the supervisor digs through the project's
+own documents, searches the web, and measures the real answer where the system can be asked
+directly. It comes back to you only for the things a human has to settle.
+
 ## Installation
 
 With the Skills CLI:
@@ -94,27 +99,30 @@ It checks the work. It reads the diff, runs the tests, renders the page. "All te
 a claim; a green run you triggered is evidence. A supervisor that forwards claims adds
 latency and nothing else.
 
-It answers their questions rather than passing them along. When a session hits an open
-question, it works a ladder: the project's own docs first, then research, and where the
-system can be asked directly, a measurement instead of a citation. Only after that does it
-come to you, with the findings and a recommendation attached.
+It answers their questions rather than passing them along, which is the part that decides
+whether you can actually leave. A session that stops on every unstated decision is a session
+you are still babysitting. So the supervisor works a ladder, and stops at the first rung that
+settles it:
 
-It wakes you for money, vendors, publishing, matters of taste, and permission dialogs, and
-handles the rest itself. Ten hours of unattended work should cost you four decisions rather
-than four hundred.
+1. The project's own specs and principles. A surprising number of "open questions" were
+   already decided by something the project wrote down and the session had not connected.
+2. Web search, for a convention or a published standard.
+3. A measurement, when the system can be asked directly. A number you measured beats a
+   number you cited.
 
-## How many at once?
+Only after all three does it come to you, and then with the findings and a recommendation
+attached rather than a bare question.
 
-There is no limit in the tool. Polling 100 panes takes 0.62s, so a thousand would cost about
-six seconds per cycle. Two things outside it bind first.
+Here is one from the run this was built during. A session was about to score simulated
+trades using a spec that assumed a 5 basis point spread. The supervisor could have asked
+which number to use. Instead it queried the live venue and found real spreads of 0.001 to
+1.16 basis points across the instruments in question, so the assumed figure overstated
+trading friction by between four and several thousand times, and that friction fed every
+score the product computed. Nobody was interrupted, and a wrong number never shipped.
 
-Your RAM is the hard floor. A Claude session holds 275 to 390 MB, which works out to roughly
-8 on an 8 GB laptop, 20 on 16 GB, and 100 or more on a real workstation.
-
-Review is the other limit, and the more interesting one. Past a certain point a supervisor
-stops reading diffs and starts sampling, and a sampling supervisor is really doing dispatch,
-which native subagents already handle better. Run as many as your machine holds, but six
-sessions genuinely reviewed are worth more than sixty glanced at.
+Some things it will not decide, and escalates immediately without working the ladder: money,
+vendors, publishing, matters of taste, and permission dialogs. Ten hours of unattended work
+should cost you four decisions rather than four hundred.
 
 ## Why not just use subagents?
 
@@ -132,31 +140,6 @@ session forget, and what has to survive the forgetting?
 Reach for `/supervise` when the work is long, when you want to watch it happen, and when the
 session should still be around tomorrow.
 
-## Built the hard way
-
-Three decisions, each from something that broke.
-
-The terminal lies, so it is only used for signals. `tmux send-keys` silently truncated a
-1,200-character instruction to its last 232 characters, mid-word, without an error anywhere.
-`capture-pane` returns only what is left in the scrollback, and reading a long report that
-way once lost its first half, which happened to contain a correction to the supervisor's own
-work. State comes from the terminal. Content always comes from the transcript on disk.
-
-Session IDs move and terminals do not. Every `/clear` mints a new session ID, so a
-supervisor holding the old one watches a dead file and concludes all is quiet. Every
-transcript also carries a `bridgeSessionId` that never changes:
-
-```text
-cse_01Pn48ur…  →  b47163fa → d8c95e98 → 2a11f9a9 → 9513c215
-                  one terminal, three /clears, four session IDs
-```
-
-Hand it any ID in that chain and it finds the live one.
-
-Nothing is sent unverified. Instructions over 120 characters are refused outright. The input
-is cleared first, because Claude Code renders suggestions there and a bare Enter would submit
-one nobody wrote. The text is then checked character for character before Enter is pressed.
-
 ## The toolkit
 
 Six scripts, useful on their own:
@@ -172,6 +155,10 @@ sv-watch.sh work:0.0 work:0.1 api:0.0  # one line per state change worth acting 
 
 `sv-launch.sh` starts sessions detached rather than hidden. It hands you
 `tmux attach -t work`, so you can watch live and take the keyboard whenever you like.
+
+A session's ID changes every time you run `/clear`, so `sv-resolve.py` tracks the
+`bridgeSessionId` that stays constant for the terminal instead. Hand it any ID a session has
+ever had and it finds the live one.
 
 ## It will never
 

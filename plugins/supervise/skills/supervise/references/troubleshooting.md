@@ -78,3 +78,17 @@ Exact-string replacement against a formatted file (Prettier, gofmt, black) match
 once the formatter has re-padded a table or rewrapped a block, and most replace functions do
 not error when the pattern is absent. Verify every edit landed rather than trusting the
 call. This one recurs often enough to be worth a habit rather than a rule.
+
+## How many sessions can I supervise at once?
+
+Nothing in the tool caps it. Polling 100 panes takes about 0.62s, so a thousand would cost
+roughly six seconds per cycle. Two things outside it bind first.
+
+**Memory.** A Claude Code session holds 275 to 390 MB resident. That works out to about 8 on
+an 8 GB laptop, 20 on 16 GB, and 100 or more on a workstation. Past that the machine swaps
+and everything slows down together, including the supervisor.
+
+**Review capacity**, which matters more. Past some number the supervisor stops reading diffs
+and starts sampling, and it will not announce the moment it crossed over. A sampling
+supervisor is doing dispatch, which native subagents already handle better and more cheaply.
+Six sessions genuinely reviewed are worth more than sixty glanced at.
