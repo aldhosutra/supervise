@@ -1,9 +1,8 @@
 # /supervise
 
-**Give it a goal. Walk away. Come back to finished work.**
-
-`/supervise` turns a Claude Code session into a foreman for your other Claude Code sessions
-— as many as your machine will hold — running in tmux where you can watch every keystroke.
+You give it a goal and walk away. `/supervise` turns one Claude Code session into a foreman
+for your others, as many as your machine will hold, running in tmux where you can watch
+every keystroke.
 
 ```text
 /plugin marketplace add aldhosutra/supervise
@@ -14,81 +13,66 @@
 /supervise 9513c215 4f2b1a08
 ```
 
-It asks what each session's job is and what *done* means, then runs until it's done.
+It asks what each session's job is and what finished looks like, then keeps them at it.
 
----
+## What a supervisor does
 
-## What a supervisor actually does
+It keeps the sessions working. They stall between tasks, so it picks the next one and sends
+it, which saves you eight hours of typing "continue".
 
-Not a task queue. A supervisor.
+It checks the work. It reads the diff, runs the tests, renders the page. "All tests pass" is
+a claim; a green run you triggered is evidence. A supervisor that forwards claims adds
+latency and nothing else.
 
-**It keeps them working.** Sessions stall between tasks; it picks the next one and sends it.
-No more sitting there typing "continue" for eight hours.
+It answers their questions rather than passing them along. When a session hits an open
+question, it works a ladder: the project's own docs first, then research, and where the
+system can be asked directly, a measurement instead of a citation. Only after that does it
+come to you, with the findings and a recommendation attached.
 
-**It checks the work.** It reads the diff, runs the tests, renders the page — because
-"all tests pass" is a claim, and a green run you triggered is evidence. A supervisor that
-forwards claims adds latency and nothing else.
-
-**It answers their questions instead of forwarding them.** When a session hits an open
-question, it works the ladder: answer it from the project's own docs → research it, or
-*measure* it → and only then bring it to you, with the findings and a recommendation.
-
-**It wakes you for exactly what's yours.** Money, vendors, publishing, taste, permission
-dialogs. Everything else it handles.
-
-That last part is the whole point. Ten hours of unattended work should cost you four
-decisions, not four hundred.
-
----
+It wakes you for money, vendors, publishing, matters of taste, and permission dialogs, and
+handles the rest itself. Ten hours of unattended work should cost you four decisions rather
+than four hundred.
 
 ## How many at once?
 
-**There's no limit in the tool.** Polling 100 panes takes 0.62s, so a thousand would cost
-about six seconds per cycle. Two things outside it bind first.
+There is no limit in the tool. Polling 100 panes takes 0.62s, so a thousand would cost about
+six seconds per cycle. Two things outside it bind first.
 
-**Your RAM.** A Claude session holds 275–390 MB, so that is the hard floor: roughly 8 on an
-8 GB laptop, 20 on 16 GB, 100+ on a real workstation.
+Your RAM is the hard floor. A Claude session holds 275 to 390 MB, which works out to roughly
+8 on an 8 GB laptop, 20 on 16 GB, and 100 or more on a real workstation.
 
-**Review doesn't parallelize** — and this is the one that matters. Past a certain point a
-supervisor stops reading diffs and starts sampling, and a sampling supervisor is just a
-dispatcher. That's the thing native subagents already do better.
-
-So run as many as your machine holds, but know what you're trading. Six sessions genuinely
-reviewed beat sixty glanced at.
-
----
+Review is the other limit, and the more interesting one. Past a certain point a supervisor
+stops reading diffs and starts sampling, and a sampling supervisor is really doing dispatch,
+which native subagents already handle better. Run as many as your machine holds, but six
+sessions genuinely reviewed are worth more than sixty glanced at.
 
 ## Why not just use subagents?
 
-Use them! For short parallel fan-out — search six directories, review four files — native
-subagents are simpler, cheaper and better.
+Use them. For short parallel fan-out, like searching six directories or reviewing four
+files, native subagents are simpler and cheaper.
 
-But **a subagent is a function call. A supervised session is a process.**
+A subagent is a function call. A supervised session is a process. You call a subagent, it
+computes, it returns, and its context is destroyed; that isolation is the whole reason it
+exists.
 
-You call a subagent, it computes, it returns, its context is destroyed. That isolation is
-the entire point.
+`/clear` shows the difference. You cannot `/clear` a subagent, because there is nothing left
+to continue. So context lifecycle becomes something a supervisor decides: when should this
+session forget, and what has to survive the forgetting?
 
-The clearest proof is `/clear`. **You can't `/clear` a subagent** — not because the feature
-is missing, but because it's incoherent. There's nothing to continue. Which makes context
-lifecycle a *supervisory decision*: when should this session forget, and what must survive
-the forgetting?
-
-Reach for `/supervise` when the work is long, when you want to watch it, and when the
-session should still be there tomorrow.
-
----
+Reach for `/supervise` when the work is long, when you want to watch it happen, and when the
+session should still be around tomorrow.
 
 ## Built the hard way
 
-Three decisions, each from something that actually broke:
+Three decisions, each from something that broke.
 
-**The terminal lies — so it's only used for signals.** `tmux send-keys` silently truncated a
-1,200-character instruction to its last 232 characters, mid-word, with no error anywhere.
-And `capture-pane` returns only what's left in the scrollback — reading a long report that
+The terminal lies, so it is only used for signals. `tmux send-keys` silently truncated a
+1,200-character instruction to its last 232 characters, mid-word, without an error anywhere.
+`capture-pane` returns only what is left in the scrollback, and reading a long report that
 way once lost its first half, which happened to contain a correction to the supervisor's own
-work. **State comes from the terminal. Content always comes from the transcript on disk.**
+work. State comes from the terminal. Content always comes from the transcript on disk.
 
-**Session IDs move; terminals don't.** Every `/clear` mints a new session ID, so a
+Session IDs move and terminals do not. Every `/clear` mints a new session ID, so a
 supervisor holding the old one watches a dead file and concludes all is quiet. Every
 transcript also carries a `bridgeSessionId` that never changes:
 
@@ -99,11 +83,9 @@ cse_01Pn48ur…  →  b47163fa → d8c95e98 → 2a11f9a9 → 9513c215
 
 Hand it any ID in that chain and it finds the live one.
 
-**Nothing is sent unverified.** Instructions over 120 characters are refused outright. The
-input is cleared first — Claude Code renders *suggestions* there, and a bare Enter would
-submit one nobody wrote. The text is checked character-for-character before Enter is pressed.
-
----
+Nothing is sent unverified. Instructions over 120 characters are refused outright. The input
+is cleared first, because Claude Code renders suggestions there and a bare Enter would submit
+one nobody wrote. The text is then checked character for character before Enter is pressed.
 
 ## The toolkit
 
@@ -118,47 +100,44 @@ sv-send.sh work:0.0 "Continue."        # types it, verifies it, then hits Enter
 sv-watch.sh work:0.0 work:0.1 api:0.0  # one line per state change worth acting on
 ```
 
-`sv-launch.sh` starts sessions **detached, not hidden** — it hands you `tmux attach -t work`
-so you can watch live and grab the keyboard whenever you like.
-
----
+`sv-launch.sh` starts sessions detached rather than hidden. It hands you
+`tmux attach -t work`, so you can watch live and take the keyboard whenever you like.
 
 ## Install
 
-**As a plugin** (recommended — `/plugin update` keeps it current):
+As a plugin, which `/plugin update` then keeps current:
 
 ```text
 /plugin marketplace add aldhosutra/supervise
 /plugin install supervise@aldhosutra
 ```
 
-**Or one line:**
+Or in one line:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aldhosutra/supervise/main/install.sh | bash
 ```
 
-**Or from a clone:** `./install.sh` for every project, `./install.sh --project` for this one.
+Or from a clone: `./install.sh` installs it for every project, `./install.sh --project` for
+this one only.
 
 Needs `tmux`, `python3`, Claude Code. macOS and Linux. Nothing else.
 
----
-
 ## It will never
 
-Answer a permission dialog for you · spend your money · commit you to a vendor · publish
-anything · decide a matter of your taste · relay a claim it hasn't checked.
-
----
+Answer a permission dialog for you, spend your money, commit you to a vendor, publish
+anything, decide a matter of your taste, or relay a claim it has not checked.
 
 ## Read more
 
-[**SKILL.md**](plugins/supervise/skills/supervise/SKILL.md) — what the supervisor does, step
-by step.
-[**policy.md**](plugins/supervise/skills/supervise/references/policy.md) — why each rule
-exists, and the failure this work keeps producing: *code that is correct and never reached.*
-Seven variants in one project, every one passing its own tests.
-[**troubleshooting.md**](plugins/supervise/skills/supervise/references/troubleshooting.md) —
-when the mapping, the dialogs, or the silence go wrong.
+[SKILL.md](plugins/supervise/skills/supervise/SKILL.md) covers what the supervisor does,
+step by step.
+
+[policy.md](plugins/supervise/skills/supervise/references/policy.md) explains why each rule
+exists, including the failure this kind of work keeps producing: code that is correct and
+never reached. Seven variants turned up in one project, every one passing its own tests.
+
+[troubleshooting.md](plugins/supervise/skills/supervise/references/troubleshooting.md) is
+for when the mapping, the dialogs, or the silence go wrong.
 
 MIT.
