@@ -181,7 +181,11 @@ not a blanket bypass.
   in its head; afterwards, hand it nothing but a pointer to its standing instructions and
   treat that as a test of whether the project's own documentation is sufficient.
 - **Keep the standing instructions in a file the session re-reads**, not in the conversation.
-  That file is what survives a reset.
+  That file is what survives a reset — and it is the precondition that makes resetting safe
+  rather than destructive. Clear a session whose knowledge lived only in its context and you
+  have lobotomised it. This also gives you a free diagnostic: if a freshly cleared session
+  cannot pick the work back up, the project's documentation was insufficient, and you found
+  that out at a moment you chose.
 - **A session that says "continuing to the next task" has usually ended its turn.** That is
   normal; nudge it. It is not a stall.
 - **Fix your own instructions when a session trips over them.** If a session works around
