@@ -1,19 +1,59 @@
 # /supervise
 
+[![skills.sh installs](https://skills.sh/b/aldhosutra/supervise)](https://skills.sh/aldhosutra/supervise)
+
 You give it a goal and walk away. `/supervise` turns one Claude Code session into a foreman
-for your others, as many as your machine will hold, running in tmux where you can watch
-every keystroke.
+for your others, as many as your machine will hold, running in tmux where you can watch every
+keystroke.
+
+## Installation
+
+With the Skills CLI:
+
+```bash
+npx skills add aldhosutra/supervise --global
+```
+
+Leave off `--global` to install into the current project only. The skill answers to
+`/supervise`.
+
+Claude Code can install it as a plugin instead, which `/plugin update` then keeps current:
 
 ```text
 /plugin marketplace add aldhosutra/supervise
 /plugin install supervise@aldhosutra
 ```
 
+Or in one line, without either:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aldhosutra/supervise/main/install.sh | bash
+```
+
+Needs `tmux`, `python3`, and Claude Code. macOS and Linux. The supervisor reads Claude Code
+transcripts and drives Claude Code panes, so the sessions it supervises have to be Claude
+Code; a different agent can run the scripts, but there would be nothing for them to read.
+
+## Usage
+
+Give it the session IDs you want supervised:
+
 ```text
 /supervise 9513c215 4f2b1a08
 ```
 
-It asks what each session's job is and what finished looks like, then keeps them at it.
+It asks what each session's job is and what finished looks like, then keeps them at it. To
+see your sessions and the panes they map to first:
+
+```bash
+sv-resolve.py --list
+```
+
+If a session is not running yet, it can start one and tell you how to watch it:
+
+```bash
+sv-launch.sh work ~/code/myproject
+```
 
 ## How it works
 
@@ -132,26 +172,6 @@ sv-watch.sh work:0.0 work:0.1 api:0.0  # one line per state change worth acting 
 
 `sv-launch.sh` starts sessions detached rather than hidden. It hands you
 `tmux attach -t work`, so you can watch live and take the keyboard whenever you like.
-
-## Install
-
-As a plugin, which `/plugin update` then keeps current:
-
-```text
-/plugin marketplace add aldhosutra/supervise
-/plugin install supervise@aldhosutra
-```
-
-Or in one line:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/aldhosutra/supervise/main/install.sh | bash
-```
-
-Or from a clone: `./install.sh` installs it for every project, `./install.sh --project` for
-this one only.
-
-Needs `tmux`, `python3`, Claude Code. macOS and Linux. Nothing else.
 
 ## It will never
 
