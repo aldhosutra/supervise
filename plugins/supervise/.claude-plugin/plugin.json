@@ -1,0 +1,12 @@
+{
+  "name": "supervise",
+  "description": "Supervise one or more running Claude Code sessions in tmux until their goals are met. Reads each session's real output from its transcript rather than the terminal, follows a session across /clear, verifies instructions arrive intact, reviews the work produced, and escalates only what genuinely needs a human.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Aldo Suhartono Putra",
+    "url": "https://github.com/aldhosutra"
+  },
+  "homepage": "https://github.com/aldhosutra/supervise",
+  "license": "MIT",
+  "keywords": ["tmux", "supervision", "orchestration", "multi-session", "automation"]
+}

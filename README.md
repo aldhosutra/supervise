@@ -41,16 +41,37 @@ when you want to watch it, and when the session should still be there tomorrow.
 
 ## Install
 
-```bash
-git clone https://github.com/aldhosutra/supervise.git
-cd supervise && ./install.sh
+### As a plugin (recommended)
+
+```text
+/plugin marketplace add aldhosutra/supervise
+/plugin install supervise@aldhosutra
 ```
 
-Installs to `~/.claude/skills/supervise`, making `/supervise` available in every project.
-Start a new Claude Code session to pick it up. For a single project instead, copy
-`.claude/skills/supervise` into that project's `.claude/skills/`.
+Two lines inside Claude Code, no clone, and `/plugin update` keeps it current. The skill
+arrives as `/supervise`.
 
-Needs `tmux`, `python3`, and Claude Code. macOS and Linux. Nothing to install.
+### One line, no plugin
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aldhosutra/supervise/main/install.sh | bash
+```
+
+Fetches the repo and copies the skill to `~/.claude/skills/supervise`, making `/supervise`
+available in every project. Start a new Claude Code session to pick it up.
+
+### From a clone
+
+```bash
+git clone https://github.com/aldhosutra/supervise.git
+cd supervise
+./install.sh              # ~/.claude/skills — every project
+./install.sh --project    # ./.claude/skills — this repo only, commit it for your team
+```
+
+Needs `tmux`, `python3`, and Claude Code. macOS and Linux. Nothing else to install.
+
+To remove it: delete `~/.claude/skills/supervise`, or `/plugin uninstall supervise@aldhosutra`.
 
 ---
 
@@ -190,12 +211,12 @@ matching unambiguous.
 
 ## Further reading
 
-- [`SKILL.md`](.claude/skills/supervise/SKILL.md) — what the supervisor actually does.
-- [`references/policy.md`](.claude/skills/supervise/references/policy.md) — the reasoning
+- [`SKILL.md`](plugins/supervise/skills/supervise/SKILL.md) — what the supervisor actually does.
+- [`references/policy.md`](plugins/supervise/skills/supervise/references/policy.md) — the reasoning
   behind each rule, and the recurring failure this kind of work produces: **code that is
   correct and never reached.** Seven variants of it in one project, every one passing its
   own tests.
-- [`references/troubleshooting.md`](.claude/skills/supervise/references/troubleshooting.md)
+- [`references/troubleshooting.md`](plugins/supervise/skills/supervise/references/troubleshooting.md)
   — mapping problems, stalls, dialogs, port collisions, silent no-op edits.
 
 ## Licence

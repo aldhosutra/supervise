@@ -1,0 +1,14 @@
+{
+  "name": "aldhosutra",
+  "owner": {
+    "name": "Aldo Suhartono Putra",
+    "url": "https://github.com/aldhosutra"
+  },
+  "plugins": [
+    {
+      "name": "supervise",
+      "source": "./plugins/supervise",
+      "description": "Supervise other Claude Code sessions running in tmux until their goals are met — keep them moving, review what they produced, and escalate only what needs a human."
+    }
+  ]
+}
