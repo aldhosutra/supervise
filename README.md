@@ -1,6 +1,9 @@
 # /supervise
 
-[![skills.sh installs](https://skills.sh/b/aldhosutra/supervise)](https://skills.sh/aldhosutra/supervise)
+[![version](https://img.shields.io/github/v/tag/aldhosutra/supervise?label=version&color=1f6feb)](https://github.com/aldhosutra/supervise/releases)
+[![license](https://img.shields.io/github/license/aldhosutra/supervise?color=2da44e)](LICENSE)
+![requires Claude Code](https://img.shields.io/badge/requires-Claude%20Code-1f6feb)
+![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
 
 You give it a goal and walk away. `/supervise` turns one Claude Code session into a foreman
 for your others, as many as your machine will hold, running in tmux where you can watch every
