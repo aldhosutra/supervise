@@ -58,7 +58,7 @@ session is not running yet it starts one and tells you how to attach.
 ```mermaid
 flowchart LR
     U([you]) -->|"one goal per session"| S
-    S -->|"escalates only money, vendors,<br/>publishing, taste, dialogs"| U
+    S -->|"only what a human can settle:<br/>money, vendors, publishing,<br/>taste, permission dialogs"| U
 
     S["supervisor<br/>(this skill)"]
 
@@ -83,6 +83,28 @@ flowchart LR
 The terminal is read for signals and never for content. A pane scrolls, so a long reply read
 that way arrives as its tail; the transcript on disk has all of it.
 
+When a session hits something undecided, the supervisor does not pass it to you. It works
+down a ladder and stops at the first rung that settles the question:
+
+```mermaid
+flowchart LR
+    Q["a session hits<br/>an open question"] --> A["the project's<br/>own specs"]
+    A -->|"not decided there"| B["web search"]
+    B -->|"no clear convention"| C["measure the<br/>live system"]
+    C -->|"a person has<br/>to choose"| U([you, with the<br/>findings attached])
+
+    A -.->|answered| D([back to work])
+    B -.->|answered| D
+    C -.->|answered| D
+
+    classDef out fill:#2da44e,stroke:#2da44e,color:#fff
+    classDef human fill:#1f6feb,stroke:#1f6feb,color:#fff
+    class D out
+    class U human
+```
+
+Most questions are settled on the first or second rung and you never see them.
+
 ## What a supervisor does
 
 It keeps the sessions working. They stall between tasks, so it picks the next one and sends
@@ -105,13 +127,6 @@ settles it:
 
 Only after all three does it come to you, and then with the findings and a recommendation
 attached rather than a bare question.
-
-Here is one from the run this was built during. A session was about to score simulated
-trades using a spec that assumed a 5 basis point spread. The supervisor could have asked
-which number to use. Instead it queried the live venue and found real spreads of 0.001 to
-1.16 basis points across the instruments in question, so the assumed figure overstated
-trading friction by between four and several thousand times, and that friction fed every
-score the product computed. Nobody was interrupted, and a wrong number never shipped.
 
 Some things it will not decide, and escalates immediately without working the ladder: money,
 vendors, publishing, matters of taste, and permission dialogs. Ten hours of unattended work
