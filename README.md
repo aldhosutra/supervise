@@ -47,18 +47,8 @@ Give it the session IDs you want supervised:
 /supervise 9513c215 4f2b1a08
 ```
 
-It asks what each session's job is and what finished looks like, then keeps them at it. To
-see your sessions and the panes they map to first:
-
-```bash
-sv-resolve.py --list
-```
-
-If a session is not running yet, it can start one and tell you how to watch it:
-
-```bash
-sv-launch.sh work ~/code/myproject
-```
+It asks what each session's job is and what finished looks like, then keeps them at it. If a
+session is not running yet it starts one and tells you how to attach.
 
 ## How it works
 
