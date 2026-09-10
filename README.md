@@ -15,6 +15,36 @@ every keystroke.
 
 It asks what each session's job is and what finished looks like, then keeps them at it.
 
+## How it works
+
+```mermaid
+flowchart LR
+    U([you]) -->|"one goal per session"| S
+    S -->|"escalates only money, vendors,<br/>publishing, taste, dialogs"| U
+
+    S["supervisor<br/>(this skill)"]
+
+    subgraph tmux["tmux, attachable at any time"]
+        P1["session A"]
+        P2["session B"]
+    end
+
+    S -->|"reads state,<br/>sends verified instructions"| P1
+    S -->|"reads state,<br/>sends verified instructions"| P2
+    P1 -.-> T
+    P2 -.-> T
+    T[("transcripts<br/>.jsonl on disk")]
+    T -->|"reads what they actually said"| S
+
+    classDef me fill:#1f6feb,stroke:#1f6feb,color:#fff
+    classDef disk fill:#2da44e,stroke:#2da44e,color:#fff
+    class S me
+    class T disk
+```
+
+The terminal is read for signals and never for content. A pane scrolls, so a long reply read
+that way arrives as its tail; the transcript on disk has all of it.
+
 ## What a supervisor does
 
 It keeps the sessions working. They stall between tasks, so it picks the next one and sends
