@@ -1,224 +1,147 @@
 # /supervise
 
-A Claude Code skill for supervising other Claude Code sessions — one of them or six — until
-their goals are met.
+**Give it a goal. Walk away. Come back to finished work.**
 
-You launch the sessions in tmux and can watch them work. `/supervise` keeps them moving
-between tasks, reviews what they actually produced, answers their questions by reasoning and
-research, and interrupts you only for what genuinely needs a human.
-
-```bash
-/supervise 9513c215-a113-4847-b516-465f807b3465 4f2b1a08-6c31-4d90-b7e2-1a5c9e3f8d02
-```
-
-It asks what each session's job is and what "done" means for it, checks each one is in the
-right working directory, then runs until those goals are met.
-
----
-
-## A subagent is a function call. A supervised session is a process.
-
-You call a subagent, it computes, it returns, and its context is discarded. That isolation
-is not a side effect — it is the entire point. The parent specifically does not want the
-intermediate work.
-
-A supervised session is something else: it persists, it learns the codebase over days, and
-its lifecycle is yours to manage.
-
-The sharpest illustration is `/clear`. **You cannot `/clear` a subagent** — not because the
-feature is missing, but because it is incoherent. There is nothing to continue. A
-subagent's context is not cleared, it is destroyed along with the thing that owned it.
-`/clear` only means anything for an entity that survives the reset.
-
-Which makes **context lifecycle a supervisory decision**: when should this session forget,
-and what must survive the forgetting? That question does not exist for a function call.
-
-Use native subagents for short parallel fan-out — search six directories, review four files.
-They are simpler, cheaper and better at it. Reach for `/supervise` when the work is long,
-when you want to watch it, and when the session should still be there tomorrow.
-
----
-
-## Install
-
-### As a plugin (recommended)
+`/supervise` turns a Claude Code session into a foreman for your other Claude Code sessions
+— one of them, or six at once, running in tmux where you can watch every keystroke.
 
 ```text
 /plugin marketplace add aldhosutra/supervise
 /plugin install supervise@aldhosutra
 ```
 
-Two lines inside Claude Code, no clone, and `/plugin update` keeps it current. The skill
-arrives as `/supervise`.
+```text
+/supervise 9513c215 4f2b1a08
+```
 
-### One line, no plugin
+It asks what each session's job is and what *done* means, then runs until it's done.
+
+---
+
+## What a supervisor actually does
+
+Not a task queue. A supervisor.
+
+**It keeps them working.** Sessions stall between tasks; it picks the next one and sends it.
+No more sitting there typing "continue" for eight hours.
+
+**It checks the work.** It reads the diff, runs the tests, renders the page — because
+"all tests pass" is a claim, and a green run you triggered is evidence. A supervisor that
+forwards claims adds latency and nothing else.
+
+**It answers their questions instead of forwarding them.** When a session hits an open
+question, it works the ladder: answer it from the project's own docs → research it, or
+*measure* it → and only then bring it to you, with the findings and a recommendation.
+
+**It wakes you for exactly what's yours.** Money, vendors, publishing, taste, permission
+dialogs. Everything else it handles.
+
+That last part is the whole point. Ten hours of unattended work should cost you four
+decisions, not four hundred.
+
+---
+
+## Why not just use subagents?
+
+Use them! For short parallel fan-out — search six directories, review four files — native
+subagents are simpler, cheaper and better.
+
+But **a subagent is a function call. A supervised session is a process.**
+
+You call a subagent, it computes, it returns, its context is destroyed. That isolation is
+the entire point.
+
+The clearest proof is `/clear`. **You can't `/clear` a subagent** — not because the feature
+is missing, but because it's incoherent. There's nothing to continue. Which makes context
+lifecycle a *supervisory decision*: when should this session forget, and what must survive
+the forgetting?
+
+Reach for `/supervise` when the work is long, when you want to watch it, and when the
+session should still be there tomorrow.
+
+---
+
+## Built the hard way
+
+Three decisions, each from something that actually broke:
+
+**The terminal lies — so it's only used for signals.** `tmux send-keys` silently truncated a
+1,200-character instruction to its last 232 characters, mid-word, with no error anywhere.
+And `capture-pane` returns only what's left in the scrollback — reading a long report that
+way once lost its first half, which happened to contain a correction to the supervisor's own
+work. **State comes from the terminal. Content always comes from the transcript on disk.**
+
+**Session IDs move; terminals don't.** Every `/clear` mints a new session ID, so a
+supervisor holding the old one watches a dead file and concludes all is quiet. Every
+transcript also carries a `bridgeSessionId` that never changes:
+
+```text
+cse_01Pn48ur…  →  b47163fa → d8c95e98 → 2a11f9a9 → 9513c215
+                  one terminal, three /clears, four session IDs
+```
+
+Hand it any ID in that chain and it finds the live one.
+
+**Nothing is sent unverified.** Instructions over 120 characters are refused outright. The
+input is cleared first — Claude Code renders *suggestions* there, and a bare Enter would
+submit one nobody wrote. The text is checked character-for-character before Enter is pressed.
+
+---
+
+## The toolkit
+
+Six scripts, useful on their own:
+
+```bash
+sv-launch.sh work ~/code/myproject     # start a session, print how to attach
+sv-resolve.py --list                   # every session ↔ its tmux pane
+sv-state.sh work:0.0                   # BUSY | IDLE | PROMPT | UNKNOWN | GONE
+sv-read.py --session <id> --turns 2    # what it really said, from the transcript
+sv-send.sh work:0.0 "Continue."        # types it, verifies it, then hits Enter
+sv-watch.sh work:0.0 work:0.1 api:0.0  # one line per state change worth acting on
+```
+
+`sv-launch.sh` starts sessions **detached, not hidden** — it hands you `tmux attach -t work`
+so you can watch live and grab the keyboard whenever you like.
+
+---
+
+## Install
+
+**As a plugin** (recommended — `/plugin update` keeps it current):
+
+```text
+/plugin marketplace add aldhosutra/supervise
+/plugin install supervise@aldhosutra
+```
+
+**Or one line:**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aldhosutra/supervise/main/install.sh | bash
 ```
 
-Fetches the repo and copies the skill to `~/.claude/skills/supervise`, making `/supervise`
-available in every project. Start a new Claude Code session to pick it up.
+**Or from a clone:** `./install.sh` for every project, `./install.sh --project` for this one.
 
-### From a clone
-
-```bash
-git clone https://github.com/aldhosutra/supervise.git
-cd supervise
-./install.sh              # ~/.claude/skills — every project
-./install.sh --project    # ./.claude/skills — this repo only, commit it for your team
-```
-
-Needs `tmux`, `python3`, and Claude Code. macOS and Linux. Nothing else to install.
-
-To remove it: delete `~/.claude/skills/supervise`, or `/plugin uninstall supervise@aldhosutra`.
+Needs `tmux`, `python3`, Claude Code. macOS and Linux. Nothing else.
 
 ---
 
-## The design, and why
+## It will never
 
-Every rule here came from something going wrong during a long supervised run, not from
-theory.
-
-### The terminal lies in both directions
-
-**Outbound.** `tmux send-keys` silently truncates. A 1,200-character instruction arrived as
-its last 232 characters, starting mid-word, with no error anywhere. The receiving session
-did something reasonable with the fragment.
-
-→ `sv-send.sh` refuses anything over 120 characters, verifies the text landed in the input
-before pressing Enter, and clears first — Claude Code renders *suggestions* at the prompt,
-and Enter without clearing submits one nobody wrote. Longer instructions go in a file, sent
-as a one-line pointer.
-
-**Inbound.** `capture-pane` returns what is still in the scrollback, which for a long reply
-is its tail. Reading a report that way once cost the first half of it — and the missing half
-contained a correction to the supervisor's own work.
-
-→ Content **always** comes from the session's transcript on disk. The terminal is used for
-state and nothing else.
-
-**So: the terminal is the signal, the transcript is the content.**
-
-### Session ids move; terminals do not
-
-A session id changes every time you run `/clear`. A supervisor holding the old id reads a
-transcript that has stopped growing and concludes the session went quiet.
-
-Every transcript line also carries a `bridgeSessionId`, constant for the life of the
-terminal:
-
-```
-cse_01Pn48ur…  →  b47163fa → d8c95e98 → 2a11f9a9 → 9513c215
-                  one terminal, three /clears, four session ids
-```
-
-→ `sv-resolve.py` tracks the bridge id. Hand it *any* id in a lineage and it finds whichever
-session is live now.
-
-### Reset is a tool, not an accident
-
-Auto-compaction picks its own moment and summarises lossily. A long-running session's
-context accumulates superseded decisions — a plan that changed, a recommendation that was
-withdrawn — and a summary can carry the wrong version forward.
-
-→ Reset deliberately, at natural seams. Before clearing, have the session write down
-anything living only in its head. Afterwards, hand it nothing but a pointer to its standing
-instructions.
-
-**The precondition that makes this safe:** it only works because the state lives in files
-the session re-reads. Clear a session whose knowledge existed only in its context and you
-have lobotomised it. Which gives you a free diagnostic — if a freshly cleared session cannot
-pick the work back up, the project's documentation was insufficient, and you have found that
-out at a moment you chose.
-
-### Supervising is reviewing, not relaying
-
-A supervisor that forwards claims adds latency and nothing else.
-
-→ Read the diff, run the tests, render the page, query the database. Re-derive a reported
-number once. Watch for work that satisfies its own acceptance criteria and misses the point.
-Anything a person looks at needs a person to look at it.
-
-### Questions get worked, not forwarded
-
-→ Answer it from the project's own documents first. Then research or measure it — a measured
-number beats a cited one. Only then bring it to the user, with the research and a
-recommendation, never as a bare question. Escalating an answerable question spends the
-attention this skill exists to protect.
-
-Escalate immediately, without the ladder, when the answer costs money, commits to a vendor,
-publishes something, or is a matter of taste the user owns.
+Answer a permission dialog for you · spend your money · commit you to a vendor · publish
+anything · decide a matter of your taste · relay a claim it hasn't checked.
 
 ---
 
-## The tools
+## Read more
 
-The skill drives six scripts, each useful on its own.
+[**SKILL.md**](plugins/supervise/skills/supervise/SKILL.md) — what the supervisor does, step
+by step.
+[**policy.md**](plugins/supervise/skills/supervise/references/policy.md) — why each rule
+exists, and the failure this work keeps producing: *code that is correct and never reached.*
+Seven variants in one project, every one passing its own tests.
+[**troubleshooting.md**](plugins/supervise/skills/supervise/references/troubleshooting.md) —
+when the mapping, the dialogs, or the silence go wrong.
 
-```bash
-# Start a session in tmux and print how to watch it
-scripts/sv-launch.sh work ~/code/myproject
-
-# Every Claude session, with the tmux pane it maps to
-scripts/sv-resolve.py --list
-
-# Resolve one session to its live transcript and pane (follows /clear)
-scripts/sv-resolve.py --session <id>
-
-# What is that pane doing?   BUSY | IDLE | PROMPT | UNKNOWN | GONE
-scripts/sv-state.sh work:0.0
-
-# What did it actually say?  (from the transcript, not the screen)
-scripts/sv-read.py --session <id> --turns 2
-scripts/sv-read.py --session <id> --sentinel
-
-# Type an instruction — pressing Enter only if it arrived intact
-scripts/sv-send.sh work:0.0 "Continue with the next task."
-
-# Watch many panes; one line per state change worth acting on
-scripts/sv-watch.sh work:0.0 work:0.1 api:0.0
-```
-
-`sv-launch.sh` starts the session **detached, not hidden** — it prints `tmux attach -t work`
-so you can watch it live and take the keyboard whenever you want. If a trust dialog is
-waiting it stops and says so, because that is your decision rather than the supervisor's.
-
-`sv-state.sh` reports `UNKNOWN` rather than guessing when a screen matches nothing. Silence
-and "still running" look identical; that is the failure this is designed against.
-
----
-
-## Supervising several at once
-
-One watcher for every pane, not one per session — per-session watchers get reaped under
-memory pressure and you will not notice. Keep a table of session, pane, goal and current
-task, and re-read it on every wake; confusing two sessions means sending one another's
-instructions. Give each session its own git worktree: two sessions in one working tree will
-collide over the index and the branch, and separate directories also make pane-to-session
-matching unambiguous.
-
----
-
-## What it will not do
-
-- Answer a permission dialog for you.
-- Spend your money, commit you to a vendor, or publish anything.
-- Decide a question that is a matter of your taste.
-- Relay a claim it has not checked.
-
----
-
-## Further reading
-
-- [`SKILL.md`](plugins/supervise/skills/supervise/SKILL.md) — what the supervisor actually does.
-- [`references/policy.md`](plugins/supervise/skills/supervise/references/policy.md) — the reasoning
-  behind each rule, and the recurring failure this kind of work produces: **code that is
-  correct and never reached.** Seven variants of it in one project, every one passing its
-  own tests.
-- [`references/troubleshooting.md`](plugins/supervise/skills/supervise/references/troubleshooting.md)
-  — mapping problems, stalls, dialogs, port collisions, silent no-op edits.
-
-## Licence
-
-MIT. See [LICENSE](LICENSE).
+MIT.
