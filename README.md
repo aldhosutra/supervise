@@ -3,7 +3,7 @@
 **Give it a goal. Walk away. Come back to finished work.**
 
 `/supervise` turns a Claude Code session into a foreman for your other Claude Code sessions
-— one of them, or six at once, running in tmux where you can watch every keystroke.
+— one, or a dozen — running in tmux where you can watch every keystroke.
 
 ```text
 /plugin marketplace add aldhosutra/supervise
@@ -38,6 +38,23 @@ dialogs. Everything else it handles.
 
 That last part is the whole point. Ten hours of unattended work should cost you four
 decisions, not four hundred.
+
+---
+
+## How many at once?
+
+The scripts aren't the bottleneck: polling 100 panes takes 0.62s, so a thousand would cost
+about six seconds per cycle. Two other things bind first.
+
+**Memory.** A Claude session holds 275–390 MB. That's ~8 on an 8 GB laptop, ~20 on 16 GB,
+100+ on a real workstation.
+
+**Review doesn't parallelize** — and this is the one that matters. Past a certain point a
+supervisor stops reading diffs and starts sampling, and a sampling supervisor is just a
+dispatcher. That's the thing native subagents already do better.
+
+So run as many as your machine holds, but know what you're trading. Six sessions genuinely
+reviewed beat sixty glanced at.
 
 ---
 
