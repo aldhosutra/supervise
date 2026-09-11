@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Watch one or more Claude panes and emit a line whenever one changes state.
+# Watch one or more supervised panes and emit a line whenever one changes state.
+# Works for Claude Code and opencode alike - sv-state.sh handles the difference.
 # Designed as the command of a persistent monitor: quiet while work proceeds,
 # one event per transition worth acting on.
 #

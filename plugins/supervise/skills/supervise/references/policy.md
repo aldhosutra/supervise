@@ -3,7 +3,29 @@
 Every rule in `SKILL.md` came from something going wrong across a long supervised run. This
 file is the reasoning, so a future reader can tell which rules are load-bearing.
 
+## Two agents, one model of supervision
+
+The skill supports Claude Code and opencode. That is not two skills sharing a name: the
+model — a pane the user can attach to, content read from the agent's own records rather
+than the screen, a BUSY/IDLE/PROMPT state machine, dialogs left to the human — holds for
+both, because it is a model of *watching someone work*, not of one program's terminal.
+
+What differs is how much of that the agent tells you, and the adapters differ accordingly.
+Claude Code offers a transcript file and a screen, so state has to be read off the screen.
+opencode runs an HTTP server that publishes its state, its message history and its pending
+permission queue, so nothing about it has to be inferred from pixels. The opencode adapter
+falls back to reading the screen only when that server cannot be reached, and says UNKNOWN
+rather than guessing when the fallback cannot classify it either.
+
+Where an agent removes a constraint, the constraint goes — opencode has no 120-character
+send limit because nothing truncates. Where an agent removes a *protection*, it stays:
+opencode's API can answer a permission dialog, and the adapter still refuses to, because
+that rule was never about what was technically possible.
+
 ## The pane lies twice
+
+This is the Claude Code adapter's problem specifically, and it is why the opencode adapter
+was built on the API instead.
 
 **Outbound.** `tmux send-keys -l` with a long string silently delivers only part of it. A
 ~1,200-character instruction arrived as its last 232 characters, starting mid-word. The
@@ -22,7 +44,15 @@ is on screen waiting for a keypress. So: pane for state, transcript for content.
 ## Suggested text in the input box is not input
 
 Claude Code renders suggestions at the prompt. Pressing Enter without clearing submits
-something nobody typed. `sv-send.sh` clears with `C-u` first.
+something nobody typed. The Claude adapter clears with `C-u` first; the opencode adapter
+clears the prompt box over the API for the same reason.
+
+## Send through the front door, not around it
+
+opencode's API could post a message straight into a session, bypassing the TUI entirely.
+The adapter instead types into the TUI's own prompt box and submits it, because the whole
+premise of this skill is that the user can attach and see what happened. An instruction
+that never appears on screen is a hidden worker pool with extra steps.
 
 ## Session ids are not stable; terminals are
 
@@ -30,6 +60,16 @@ something nobody typed. `sv-send.sh` clears with `C-u` first.
 has stopped moving and concludes the session has gone quiet. Every transcript line carries a
 `bridgeSessionId` that is constant for the terminal's life, so the resolver tracks that and
 returns whichever session is currently live in that lineage.
+
+opencode has no such lineage — a reset there is simply a new session with a new id — but it
+has the same failure in a different shape. Its sessions are only visible through the server
+of the instance that owns them, and a freshly opened TUI holds a session that has not been
+written down yet, so "the newest session in this directory" names the *previous* run. A
+supervisor that trusted that would read a conversation that stopped moving yesterday and
+conclude the session had gone quiet: the same wrong conclusion, reached by another route.
+Hence `mapped_by`, which distinguishes the server naming a running session from the
+resolver guessing, and hence `sv-send.sh` reporting the id its prompt actually reached
+rather than the one it expected.
 
 ## The failure this kind of work keeps producing
 

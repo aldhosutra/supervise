@@ -1,15 +1,20 @@
 ---
 name: supervise
-description: Supervise one or more running Claude Code sessions in tmux until their goals are met — keep them moving between tasks, read their real output from the transcript rather than the terminal, review the work they claim to have done, resolve their open questions by reasoning and research, and escalate to the user only what genuinely needs a human. Use when the user runs /supervise, or asks to babysit, drive, orchestrate, or keep going a long-running session or several of them.
+description: Supervise one or more running coding-agent sessions (Claude Code or opencode) in tmux until their goals are met — keep them moving between tasks, read their real output from the session's own records rather than the terminal, review the work they claim to have done, resolve their open questions by reasoning and research, and escalate to the user only what genuinely needs a human. Use when the user runs /supervise, or asks to babysit, drive, orchestrate, or keep going a long-running session or several of them.
 ---
 
 # Supervise
 
-You are supervising other Claude Code sessions. They do the work; you keep them moving,
+You are supervising other coding-agent sessions. They do the work; you keep them moving,
 check what they produced, and protect the user's attention.
 
 The user can watch every supervised session live in tmux, so this is not a hidden worker
 pool — it is a foreman on a floor the user can walk onto at any time.
+
+**Claude Code and opencode are both supported.** Every script below takes the same
+arguments either way and works out which agent a pane is running on its own. Where the two
+genuinely differ — how much text can be sent at once, above all — the difference is called
+out where it matters.
 
 ## Invocation
 
@@ -28,9 +33,18 @@ Do these in order. Do not skip to the work.
 scripts/sv-resolve.py --session <id>
 ```
 
-Returns the live transcript path, the tmux pane, and `cleared_since`. Session ids change
-on `/clear`; `bridgeSessionId` does not, so the resolver follows the terminal rather than
-the id. Re-resolve after any `/clear` — never cache a transcript path across one.
+Returns the agent, where its output can be read, the tmux pane, and `cleared_since`.
+
+For Claude Code that means a transcript path. Session ids change on `/clear`;
+`bridgeSessionId` does not, so the resolver follows the terminal rather than the id.
+Re-resolve after any `/clear` — never cache a transcript path across one.
+
+For opencode there is no transcript file: its history lives behind the HTTP server each
+instance runs, and `sv-read.py` goes through that. The id is stable, so there is no lineage
+to follow — but the resolver has to find the session by pane and directory, and `mapped_by`
+says how sure it is. `busy` is the server naming the session it is running, which is
+certain; `cwd+recency` is a guess, and it is wrong for a TUI freshly opened in a directory
+that already has history, until the first message lands. Send something, then re-resolve.
 
 **2. Confirm each one has a pane.** If `pane` is null the session is not in tmux, or is not
 running.
@@ -38,8 +52,10 @@ running.
 **If it needs launching, launch it — and tell the user how to watch it.**
 
 ```bash
-scripts/sv-launch.sh <name> <absolute/project/path> [--resume <session-id>]
+scripts/sv-launch.sh <name> <absolute/project/path> [--agent claude|opencode] [--resume <session-id>]
 ```
+
+`--agent` defaults to whichever of the two is installed, and to `claude` when both are.
 
 It starts Claude in a detached tmux session, waits until it reaches a state worth naming,
 and prints the exact command the user needs (`tmux attach -t <name>`, or
@@ -53,11 +69,11 @@ Two things the launcher will tell you, and you should pass on rather than work a
 
 - **A trust dialog stops it** on a first run in a new directory. That is a security
   decision, so it is the user's to make — report it and wait, do not answer it.
-- **A brand-new session has no id yet.** Claude writes no transcript until its first
-  message. This is fine: **the pane is the working handle.** `sv-state.sh`, `sv-send.sh`
-  and `sv-watch.sh` all take a pane. The session id only matters for reading output, and by
-  the time there is output to read, the transcript exists. Re-run
-  `sv-resolve.py --list` after the first instruction to pick the id up.
+- **A brand-new session has no id yet.** Neither agent writes a session down until its
+  first message. This is fine: **the pane is the working handle.** `sv-state.sh`,
+  `sv-send.sh` and `sv-watch.sh` all take a pane, and `sv-read.py --pane` does too. The id
+  only matters for reading output, and by the time there is output to read it exists.
+  Re-run `sv-resolve.py --list` after the first instruction to pick it up.
 
 **3. Check the working directory is right.** The resolver reports each session's `cwd`.
 Confirm it is the intended repo, branch or worktree before any instruction goes out. A
@@ -83,9 +99,10 @@ dialog), `UNKNOWN` (unclassifiable screen), `GONE`.
 
 On every wake, for the session that changed:
 
-1. **Read the transcript, never the pane.** `scripts/sv-read.py --session <id> --turns 1`.
-   The pane is a lossy render; long replies scroll out of it. Relaying a trimmed tail as if
-   it were the whole answer is the worst thing you can do in this role.
+1. **Read the session's own record, never the pane.** `scripts/sv-read.py --session <id>
+   --turns 1`, or `--pane <pane>`. The pane is a lossy render; long replies scroll out of
+   it. Relaying a trimmed tail as if it were the whole answer is the worst thing you can do
+   in this role.
 2. **Check preconditions** the work depends on — services up, database reachable, disk
    present. A session that cannot commit because Docker is down will blame its own code.
 3. **Review what it claims.** See "Verify, don't relay" below.
@@ -97,14 +114,22 @@ On every wake, for the session that changed:
 scripts/sv-send.sh <pane> "Continue with the next task."
 ```
 
-`tmux send-keys` silently truncates long strings — a 1,200-character instruction can arrive
-as its last 200 characters, starting mid-word. So `sv-send.sh` refuses anything over 120
-characters, clears the input first (Claude Code renders *suggestions* there, and Enter
-without clearing submits one nobody wrote), verifies the text landed, and only then presses
-Enter.
+Either way the send is verified rather than assumed, and refused outright if the pane is
+waiting on a dialog. How much can go in one instruction depends on the agent:
 
-**For anything longer, write a file and send a pointer.** Put it inside the supervised
-project so the session can read it without a permission prompt, somewhere git-ignored:
+**Claude Code — 120 characters.** `tmux send-keys` silently truncates long strings; a
+1,200-character instruction can arrive as its last 200 characters, starting mid-word. So
+the adapter refuses anything longer, clears the input first (Claude Code renders
+*suggestions* there, and Enter without clearing submits one nobody wrote), verifies the
+text landed, and only then presses Enter.
+
+**opencode — no limit.** The instruction goes through the HTTP API into the TUI's own
+prompt box, so nothing is truncated and the user still sees it typed on screen.
+`sv-send.sh <pane> --file <path>` sends a whole file as one instruction.
+
+**For anything longer than a Claude pane will take, write a file and send a pointer.** Put
+it inside the supervised project so the session can read it without a permission prompt,
+somewhere git-ignored:
 
 ```bash
 mkdir -p <project>/tmp/supervisor && cat > <project>/tmp/supervisor/NEXT.md <<'EOF'
@@ -115,6 +140,10 @@ scripts/sv-send.sh <pane> 'Read tmp/supervisor/NEXT.md and follow it.'
 
 Check the path really is ignored (`git check-ignore -v <path>`) before writing there. Never
 add a `.gitignore` exception to make room for your own notes.
+
+This pointer habit is worth keeping on opencode too, even though it is no longer forced. A
+standing instruction in a file survives a context reset; one that exists only in the
+conversation does not.
 
 ### Verify, don't relay
 
@@ -158,9 +187,13 @@ vendor, publishes something, or is a matter of taste the user owns.
 user with what is being asked. Approving an unknown action on someone's behalf while they
 are away is exactly what should stop the loop.
 
-If dialogs are stalling a long run, the fix is a considered allowlist in the supervised
-project's `.claude/settings.local.json` (git-ignored, per-machine), proposed to the user —
-not a blanket bypass.
+opencode publishes its pending dialogs over the API, and that API can answer them. Do not.
+The rule is about who decides, not about which mechanism is available.
+
+If dialogs are stalling a long run, the fix is a considered allowlist — Claude Code's
+`.claude/settings.local.json`, or opencode's `permission` block in the project's
+`opencode.json` — proposed to the user, not a blanket bypass. Never start a supervised
+opencode session with `--auto`.
 
 ## Supervising several sessions at once
 
@@ -178,7 +211,8 @@ not a blanket bypass.
 
 ## Long runs
 
-- **Reset context at natural seams**, rather than letting auto-compaction pick the moment. A
+- **Reset context at natural seams**, rather than letting auto-compaction pick the moment
+  (`/clear` in Claude Code, a new session in opencode). A
   session's stale context can hold superseded decisions, and a summary may carry the wrong
   version forward. Before a `/clear`, have the session write down anything that exists only
   in its head; afterwards, hand it nothing but a pointer to its standing instructions and
@@ -200,3 +234,8 @@ not a blanket bypass.
 - `references/policy.md` — the reasoning behind the rules above, and the failure modes this
   skill exists to catch.
 - `references/troubleshooting.md` — mapping problems, dialogs, stalls, port collisions.
+
+The scripts above are dispatchers: they detect the agent running in a pane and hand the
+work to `scripts/adapters/claude/` or `scripts/adapters/opencode/`. Read those only when
+something agent-specific is misbehaving; everything you need day to day is in the five
+top-level commands.

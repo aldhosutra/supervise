@@ -2,12 +2,12 @@
 
 [![version](https://img.shields.io/github/v/tag/aldhosutra/supervise?label=version&color=1f6feb)](https://github.com/aldhosutra/supervise/releases)
 [![license](https://img.shields.io/github/license/aldhosutra/supervise?color=2da44e)](LICENSE)
-![requires Claude Code](https://img.shields.io/badge/requires-Claude%20Code-1f6feb)
+![agents](https://img.shields.io/badge/agents-Claude%20Code%20%7C%20opencode-1f6feb)
 ![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
 
-You give it a goal and walk away. `/supervise` turns one Claude Code session into a foreman
+You give it a goal and walk away. `/supervise` turns one coding-agent session into a foreman
 for your others, as many as your machine will hold, running in tmux where you can watch every
-keystroke.
+keystroke. It supervises **Claude Code and opencode**, and can drive both at once.
 
 The reason you can walk away is that it resolves their questions instead of forwarding them.
 When a session gets stuck on something undecided, the supervisor digs through the project's
@@ -38,9 +38,12 @@ Or in one line, without either:
 curl -fsSL https://raw.githubusercontent.com/aldhosutra/supervise/main/install.sh | bash
 ```
 
-Needs `tmux`, `python3`, and Claude Code. macOS and Linux. The supervisor reads Claude Code
-transcripts and drives Claude Code panes, so the sessions it supervises have to be Claude
-Code; a different agent can run the scripts, but there would be nothing for them to read.
+**opencode** reads `~/.claude/skills` too, so any of the routes above installs it there as
+well — and the `curl` one also adds opencode's `/supervise` command. The plugin route is
+Claude Code only.
+
+Needs `tmux`, `python3`, and at least one of Claude Code or opencode. macOS and Linux. The
+supervised sessions have to be one of those two: the supervisor itself can be either.
 
 ## Usage
 
@@ -71,8 +74,8 @@ flowchart LR
     S -->|"reads state,<br/>sends verified instructions"| P2
     P1 -.-> T
     P2 -.-> T
-    T[("transcripts<br/>.jsonl on disk")]
-    T -->|"reads what they actually said"| S
+    T[("what they actually said<br/>transcript file, or<br/>opencode's own API")]
+    T -->|"reads it from the source"| S
 
     classDef me fill:#1f6feb,stroke:#1f6feb,color:#fff
     classDef disk fill:#2da44e,stroke:#2da44e,color:#fff
@@ -81,7 +84,8 @@ flowchart LR
 ```
 
 The terminal is read for signals and never for content. A pane scrolls, so a long reply read
-that way arrives as its tail; the transcript on disk has all of it.
+that way arrives as its tail; the agent's own record has all of it — a `.jsonl` transcript
+for Claude Code, the HTTP server every opencode instance runs for opencode.
 
 When a session hits something undecided, the supervisor does not pass it to you. It works
 down a ladder and stops at the first rung that settles the question:
@@ -156,17 +160,27 @@ Six scripts, useful on their own:
 sv-launch.sh work ~/code/myproject     # start a session, print how to attach
 sv-resolve.py --list                   # every session ↔ its tmux pane
 sv-state.sh work:0.0                   # BUSY | IDLE | PROMPT | UNKNOWN | GONE
-sv-read.py --session <id> --turns 2    # what it really said, from the transcript
-sv-send.sh work:0.0 "Continue."        # types it, verifies it, then hits Enter
+sv-read.py --session <id> --turns 2    # what it really said, from its own record
+sv-send.sh work:0.0 "Continue."        # delivers it, verifies it, then submits
 sv-watch.sh work:0.0 work:0.1 api:0.0  # one line per state change worth acting on
 ```
+
+Every one of them works out which agent is in the pane and adapts. `sv-launch.sh work
+~/code/proj --agent opencode` picks explicitly; with only one of the two installed, it
+needs no flag.
 
 `sv-launch.sh` starts sessions detached rather than hidden. It hands you
 `tmux attach -t work`, so you can watch live and take the keyboard whenever you like.
 
-A session's ID changes every time you run `/clear`, so `sv-resolve.py` tracks the
-`bridgeSessionId` that stays constant for the terminal instead. Hand it any ID a session has
-ever had and it finds the live one.
+Each agent breaks in its own way, and the scripts know the difference. A Claude Code
+session's ID changes every time you run `/clear`, so `sv-resolve.py` tracks the
+`bridgeSessionId` that stays constant for the terminal instead — hand it any ID a session
+has ever had and it finds the live one. An opencode session keeps its ID but hides behind
+whichever random port its TUI is serving on, so the resolver finds the port and asks the
+server directly. One consequence worth knowing: `tmux send-keys` truncates, so instructions
+to Claude Code are capped at 120 characters and anything longer goes in a file, while
+opencode takes an instruction of any length — `sv-send.sh <pane> --file <path>` sends a
+whole one.
 
 ## It will never
 

@@ -5,11 +5,37 @@
 The session is not running inside tmux, or its process has exited. Check with
 `sv-resolve.py --list`: sessions without a pane are transcripts on disk, not live terminals.
 
-If the session *is* running in tmux but is not being matched, the resolver's two routes both
-failed. It matches on `claude --resume <id>` in the process command line first, then on the
-pane's working directory. A session started plainly as `claude` in a directory that holds
-several sessions can be ambiguous — the fix is to give the pane a distinct working directory
-(a git worktree per session is good practice anyway), or to restart it with `--resume`.
+If the session *is* running in tmux but is not being matched, the resolver's routes all
+failed. For Claude Code it matches on `claude --resume <id>` in the process command line
+first, then on the pane's working directory. A session started plainly as `claude` in a
+directory that holds several sessions can be ambiguous — the fix is to give the pane a
+distinct working directory (a git worktree per session is good practice anyway), or to
+restart it with `--resume`.
+
+## An opencode pane resolves but `base_url` is null
+
+Every opencode TUI runs an HTTP server, and that is how this skill reads and drives it. The
+port is random unless the process was started with `--port`, and the fallback is to find it
+with `lsof`. If both fail there is nothing to talk to: restart the session with
+`sv-launch.sh`, which always pins a port.
+
+The same symptom appears when opencode is running somewhere the `lsof` call cannot see the
+process — inside a container, say, or under a different user.
+
+## An opencode session is resolved as `cwd+recency` and reads the wrong conversation
+
+`mapped_by` says how the session was identified. `busy` is the server naming the session it
+is running right now, which is certain. `cwd+recency` is the fallback: the most recently
+updated session in that directory.
+
+The fallback is wrong in one specific case. A TUI opened in a directory that already has
+history shows an *empty new* session, which opencode does not write down until its first
+message — so the newest stored session is the previous run. Until you send something, the
+resolver names that older session. Send an instruction and re-resolve; `sv-send.sh` handles
+this itself and reports the id the prompt actually landed in.
+
+The same applies if someone switches session by hand inside the TUI. Re-resolve rather than
+trusting an id you cached earlier.
 
 ## Two sessions in the same repo
 
@@ -35,29 +61,44 @@ against.
 
 The screen matches none of the known states. Usual causes: a first-run trust dialog
 ("Do you trust the files in this folder?"), a crash, a full-screen diff or editor, or a
-non-Claude program in the pane. Look at it rather than guessing — `UNKNOWN` exists precisely
-so the supervisor cannot silently treat it as idle.
+program in the pane that is not a supervisable agent. Look at it rather than guessing —
+`UNKNOWN` exists precisely so the supervisor cannot silently treat it as idle.
+
+For opencode, `UNKNOWN` additionally means the server could not be reached *and* the screen
+could not be classified. State normally comes from the API there, so an `UNKNOWN` is a sign
+the instance is wedged or the port moved, not that the screen is unusual.
 
 ## A pane reports PROMPT and stays there
 
 A permission dialog is waiting. `sv-send.sh` refuses to type into it by design. Tell the
-user what is being asked and let them answer. If dialogs are stalling a long unattended run,
-propose a specific allowlist in the supervised project's `.claude/settings.local.json`
-(git-ignored, per-machine) — with the denies for destructive commands kept.
+user what is being asked and let them answer.
+
+opencode also exposes the pending request over its API, including an endpoint that would
+answer it. That does not make it yours to answer — the rule is about who decides.
+
+If dialogs are stalling a long unattended run, propose a specific allowlist — Claude Code's
+`.claude/settings.local.json` (git-ignored, per-machine), or the `permission` block in the
+project's `opencode.json` — with the denies for destructive commands kept. Never reach for
+opencode's `--auto`, which approves everything not explicitly denied.
 
 Note that a broad deny rule can catch more than intended: `Bash(rm -rf /*)` also matches
 `rm -rf /tmp/anything`, which looks like a refusal of a harmless command.
 
 ## `sv-send.sh` says VERIFY FAILED
 
-The typed text did not appear intact. Almost always the string is near the length limit, or
-contains characters the pane renders differently. Shorten it, or put the content in a file
-and send a pointer. Do not raise `SV_SEND_LIMIT` to force it through — the limit is the
-protection.
+**Claude Code.** The typed text did not appear intact. Almost always the string is near the
+length limit, or contains characters the pane renders differently. Shorten it, or put the
+content in a file and send a pointer. Do not raise `SV_SEND_LIMIT` to force it through —
+the limit is the protection.
+
+**opencode.** The prompt was submitted but no matching message appeared in any session
+within the confirmation window. Either the TUI was on a modal that swallowed it, or the
+session is slower to register than `SV_SEND_CONFIRM_SECONDS` allows. Look at the pane
+before resending: a duplicated instruction is worse than a late one.
 
 ## The session says it is continuing but nothing happens
 
-Normal. A Claude turn ends when it stops calling tools, even if its last sentence said
+Normal. A turn ends when the agent stops calling tools, even if its last sentence said
 "continuing to the next task". Nudge it. This is not a stall and does not need escalating.
 
 ## Headless browser checks fail to start

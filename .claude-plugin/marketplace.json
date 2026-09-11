@@ -8,7 +8,7 @@
     {
       "name": "supervise",
       "source": "./plugins/supervise",
-      "description": "Supervise other Claude Code sessions running in tmux until their goals are met — keep them moving, review what they produced, and escalate only what needs a human."
+      "description": "Supervise other Claude Code or opencode sessions running in tmux until their goals are met \u2014 keep them moving, review what they produced, and escalate only what needs a human."
     }
   ]
 }
