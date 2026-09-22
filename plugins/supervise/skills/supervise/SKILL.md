@@ -95,6 +95,44 @@ Run it as a persistent background monitor. It is quiet while work proceeds and e
 line per transition worth acting on: `IDLE` (finished a turn), `PROMPT` (stopped on a
 dialog), `UNKNOWN` (unclassifiable screen), `GONE`.
 
+**Do not build the watch out of two processes.** The tempting shape — run `sv-watch.sh` as
+a background shell, then point a notification monitor at its output file — has two
+independent things that can die, and when the *writer* dies the *reader* keeps happily
+tailing a file nothing will ever append to again. You are then blind, and blind looks
+exactly like "still working".
+
+Prefer **one** process that both polls and emits. If your monitor tool can run a command,
+give it the loop directly:
+
+```bash
+prev=""
+while true; do
+  s=$(scripts/sv-state.sh <pane> 2>/dev/null); [ -z "$s" ] && s="GONE"
+  if [ "$s" != "$prev" ]; then
+    case "$s" in IDLE|PROMPT|UNKNOWN|GONE) echo "$(date +%H:%M:%S) <pane> -> $s" ;; esac
+    prev="$s"
+  fi
+  [ "$s" = "GONE" ] && break
+  sleep 5
+done
+```
+
+It reuses this skill's own classifier, has nothing to reap separately, and **exits loudly
+on `GONE`** rather than falling silent — so silence means "still busy" and never "the watch
+died".
+
+**Re-arm on every expiry, without deciding whether it is worth it.** Monitors are usually
+capped — 30 minutes is common — so the watch *always* needs renewing, and the expiry notice
+is itself a wake-up, so renewing costs one call. The temptation is to skip it when you
+believe nothing can happen anyway, such as a session blocked on a dialog. Skip it and the
+gap opens exactly when something unexpected does happen, which is the only time it matters.
+
+**Your own verification can kill the watch.** Full test suites, browsers and dev servers
+run *by the supervisor* land on the same machine as the session's work. Starve it and the
+OS reaps background shells — the watcher first, because it is the cheapest thing to kill.
+Run heavy checks while the session is idle, never alongside its builds, and prefer reading
+a diff or driving a page to re-running everything.
+
 ## The supervision loop
 
 On every wake, for the session that changed:
@@ -159,8 +197,28 @@ You are not a message bus. A supervisor that forwards claims adds latency and no
   longer fail, a metric that saturates so it always reads full marks.
 - **Anything a person looks at needs a person to look at it.** If the session cannot render
   it, render it yourself before accepting it.
+- **Load the page cold and do the first thing a new user would do**, before touching
+  anything else. A session verifies the *feature*; nobody verifies the *first thirty
+  seconds*. That gap hides init-order bugs, because every check the session ran had already
+  clicked something that happened to fix the state. A control that only works after an
+  unrelated keystroke is broken for every real user and passes every test that interacts
+  first.
 - **When you are wrong, say so plainly and correct it.** You will sometimes push a session
   toward a worse answer; the run depends on it feeling able to check you rather than obey.
+
+**Before believing a failure, find out whether it is the session's.** A supervisor who
+reports flakes as regressions burns the session's time and its trust in you.
+
+- **Check which suite failed before reading the numbers under it.** A dead suite drags
+  global coverage down with it, so a flake arrives wearing a coverage regression's costume.
+  Coverage that dropped while an unrelated suite failed is evidence of nothing.
+- **Re-run once before attributing.** If a different suite fails each time, the suite is
+  flaky and the change is probably fine. If the same one fails twice, it is the change.
+- **Count the runs and tell the user.** "Seven full runs, one green, a different unrelated
+  suite each time" is an actionable finding about the repo. "The tests are flaky" is not.
+- **Do not present a workaround you have not reproduced.** A session may offer one in good
+  faith — fewer workers, a retry, an ordering flag — that does not survive contact.
+  Run it yourself before it reaches the user, and say so plainly when it fails.
 
 ### Open questions: answer, then research, then ask
 

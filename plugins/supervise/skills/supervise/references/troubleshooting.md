@@ -57,6 +57,37 @@ shell, and check it is still alive when a session has been quiet for longer than
 should take. Silence and "still running" look identical; that is the failure to design
 against.
 
+Two causes worth separating, because the fixes differ:
+
+**You starved the machine yourself.** Supervising is not free: a full test suite, a
+headless browser and a dev server run by *you* compete with the session's builds. When the
+OS starts reaping, the watcher goes first. Run heavy verification only while the session is
+idle, and prefer reading a diff or driving one page to re-running a suite. If a host tells
+you it stopped a background command for memory pressure, do not restart it on your own —
+say what was stopped, and let the user decide when there is headroom.
+
+**Your watch had two moving parts.** A background `sv-watch.sh` plus a separate monitor
+tailing its output is two processes with one failure mode each — and if the writer dies,
+the reader tails a dead file forever without a word. Collapse it into one loop that polls
+`sv-state.sh` and emits directly (SKILL.md, step 5), and make it exit loudly on `GONE` so
+silence can only mean "still busy".
+
+## The session stops with "Not logged in · Please run /login"
+
+The agent's credentials expired mid-run. The turn ends, the pane goes `IDLE`, and it looks
+like a finished task until you read the transcript — the tail is a login notice, not a
+result.
+
+**This is the user's to fix and nobody else's.** Report it with the attach command
+(`tmux attach -t <name>`, `/login`, then `Ctrl-b d`), and say what state the work is in:
+check `git status` and `git log` in the session's `cwd` and tell them whether anything is
+uncommitted, so they know whether the interruption cost them work. Do not attempt the
+login, and do not try to route around it.
+
+Expect the working tree to be dirty: credentials usually expire mid-task, so a feature can
+be finished and verified but uncommitted. Say that plainly — "a commit away from done" is
+very different news from "it stopped halfway".
+
 ## A pane reports UNKNOWN
 
 The screen matches none of the known states. Usual causes: a first-run trust dialog
@@ -90,6 +121,13 @@ Note that a broad deny rule can catch more than intended: `Bash(rm -rf /*)` also
 length limit, or contains characters the pane renders differently. Shorten it, or put the
 content in a file and send a pointer. Do not raise `SV_SEND_LIMIT` to force it through —
 the limit is the protection.
+
+**Or the pane was simply busy.** A working session redraws constantly — streamed output,
+a spinner, a tool result landing mid-verify — and the check can read the screen between
+frames and not find its own text. Enter is *not* pressed, so nothing was submitted and
+nothing is broken; the text may still be sitting unsent in the input box. Wait for `IDLE`
+and send again rather than retrying into the churn. Tell the user if you leave text
+stranded there, because the next person to touch that keyboard will press Enter on it.
 
 **opencode.** The prompt was submitted but no matching message appeared in any session
 within the confirmation window. Either the TUI was on a modal that swallowed it, or the
