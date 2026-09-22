@@ -72,6 +72,46 @@ the reader tails a dead file forever without a word. Collapse it into one loop t
 `sv-state.sh` and emits directly (SKILL.md, step 5), and make it exit loudly on `GONE` so
 silence can only mean "still busy".
 
+## Everything is slow and nobody can say why
+
+Count the dev servers before blaming anyone's code. The usual cause is leaked ones, and
+the usual reason they leaked is that someone — often the supervisor — stopped them by
+port:
+
+```bash
+lsof -ti:3000 | xargs kill -9     # frees the port, does NOT stop the server
+```
+
+That kills the listening child. Its parent (`npm run dev`, `nodemon`, `vite`,
+`next dev`) is still alive and **respawns it**, because that is what those processes are
+for. The port check then passes and the leak is invisible.
+
+They pile up across a long run, and since each one watches the same repo, **a single file
+save fans out into N full rebuilds**. One measured run: thirteen orphaned servers, oldest
+twelve hours old, every save recompiling the project thirteen times, load average 11.85.
+The session blamed its own builds; the supervisor blamed the test suite; both were wrong.
+
+Diagnose:
+
+```bash
+ps -Ao ppid,pid,etime,args= | awk '$1==1 && /npm run dev/'   # orphaned owners
+ps -Ao etime,args= | grep '[t]s-node' | awk '{print $1}' | sort | uniq -c
+```
+
+If a dozen children share one elapsed time, they all restarted together on one file
+change — that is the fan-out, and it is conclusive.
+
+Fix, and then check by process rather than by port:
+
+```bash
+ps -Ao ppid,pid,args= | awk '$1==1 && /npm run dev/ {print $2}' | xargs kill
+ps -Ao args= | grep -c '[n]odemon'
+```
+
+Other things worth eliminating before concluding a machine is just slow: build tooling
+left running by *other* projects (a forgotten `wrangler dev` cost one run ~32% CPU for
+nineteen hours), and the supervisor's own test runs overlapping the session's builds.
+
 ## The session stops with "Not logged in · Please run /login"
 
 The agent's credentials expired mid-run. The turn ends, the pane goes `IDLE`, and it looks

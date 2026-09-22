@@ -133,6 +133,29 @@ OS reaps background shells — the watcher first, because it is the cheapest thi
 Run heavy checks while the session is idle, never alongside its builds, and prefer reading
 a diff or driving a page to re-running everything.
 
+**Kill the process tree, not the port.** Every server you start to verify something must
+be stopped, and `lsof -ti:PORT | xargs kill` does **not** stop one. It kills the listening
+child, so the port frees and your check passes — while the supervisor process that owns it
+(`npm run dev`, `nodemon`, `vite`, `next dev`) survives and immediately **respawns the
+child it just lost**. Respawning is that process's entire job.
+
+Each "cleanup" then leaves a live file-watcher behind. They accumulate invisibly, and
+because they all watch the same repo, **one file save triggers N full rebuilds in
+parallel**. Measured on one run: thirteen orphaned dev servers, oldest twelve hours,
+every save recompiling the project thirteen times. Load average 11.85, and both the
+supervisor and the session blamed their own work for the slowness.
+
+Kill the owner instead, and verify by process rather than by port:
+
+```bash
+ps -Ao ppid,pid,args= | awk '$1==1 && /npm run dev/ {print $2}' | xargs kill
+ps -Ao args= | grep -c '[n]odemon'      # the check that would have caught it
+```
+
+The general rule: **a cleanup check must look for the thing you started, not a symptom of
+it.** A free port is a symptom. And sweep for strays at the end of a long run — they are
+invisible until you count them.
+
 ## The supervision loop
 
 On every wake, for the session that changed:
