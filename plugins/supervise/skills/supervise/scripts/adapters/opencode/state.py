@@ -34,11 +34,18 @@ def pane_text(pane):
 
 def from_screen(text):
     """Last resort, when the server is unreachable but the pane is alive."""
-    if "Permission required" in text or "Allow once" in text:
+    # The TUI footer wraps across terminal lines ("ctrl+p" on one line,
+    # "commands" on the next), so collapse all whitespace before matching —
+    # otherwise an idle pane misclassifies as UNKNOWN and the watcher goes
+    # blind (a manually-started TUI with no --port has no server to ask).
+    flat = " ".join(text.split())
+    if "Permission required" in flat or "Allow once" in flat:
         return "PROMPT"
-    if "esc interrupt" in text or "esc to interrupt" in text:
+    if "esc interrupt" in flat or "esc to interrupt" in flat:
         return "BUSY"
-    if "ctrl+p commands" in text:
+    # Match "ctrl+p" alone: the session path wraps between it and "commands"
+    # ("ctrl+p design-system commands"), so the full phrase never occurs.
+    if "ctrl+p" in flat:
         return "IDLE"
     return "UNKNOWN"
 

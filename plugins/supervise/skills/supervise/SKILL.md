@@ -127,6 +127,71 @@ is itself a wake-up, so renewing costs one call. The temptation is to skip it wh
 believe nothing can happen anyway, such as a session blocked on a dialog. Skip it and the
 gap opens exactly when something unexpected does happen, which is the only time it matters.
 
+**Runtimes without a wake-up: supervise synchronously.** The loop above assumes something
+wakes you when the watch emits. Some harnesses have no such primitive — no scheduler, no
+subscription, no "notify me when this file changes". A background `sv-watch.sh` still
+records events, but nobody taps your shoulder, so an `IDLE` can sit handled by no one
+until the user speaks. In that runtime, **never end your turn with a supervised session's
+state unhandled.** Run the loop inside your turn instead:
+
+```bash
+# one synchronous supervision cycle (example bounds: 15s poll, 10min wait)
+lines_before=$(wc -l < watch.log)
+for i in $(seq 1 40); do
+  sleep 15
+  [ "$(wc -l < watch.log)" -gt "$lines_before" ] && break          # transition recorded
+  kill -0 <watch-pid> 2>/dev/null || { echo "WATCH DIED"; break; }  # liveness guard
+done
+scripts/sv-state.sh <pane>   # snapshot even on expiry
+```
+
+Then process whatever the watch recorded (or the snapshot) exactly as a wake-up: read the
+session's own record, verify the artefact, send the next instruction — and wait again.
+**Every `IDLE` is processed automatically; the user is never the event bus.** Escalate to
+the user only on `PROMPT`, a blocked precondition, or an open question the ladder cannot
+resolve. A wait that expires with no transition is a wake-up too: snapshot the state,
+report it briefly, and start the next bounded wait — the same way a monitor expiry means
+re-arm, not stop. The loop ends on: goal done, pane `GONE`, or the user explicitly saying
+stop. It never ends merely because nothing happened yet.
+
+Durability is what makes stopping safe on these runtimes: every turn's work is committed,
+and the standing instructions live in a file the session re-reads, so a turn that ends
+early resumes exactly where it stopped instead of losing the thread.
+
+**Waking a dormant supervisor on opencode: `SV_NUDGE_PANE`.** On Claude Code the
+harness wakes you; on opencode nothing does — no scheduler, no subscription, no CLI that
+injects a message into a live TUI (`session` only lists and deletes). So the watcher
+delivers the wake-up itself. If the supervisor runs inside tmux, record its own pane at
+setup (`tmux display-message -p '#S:#I.#P'`) and arm the watch with it:
+
+```bash
+SV_NUDGE_PANE=<supervisor-pane> scripts/sv-watch.sh <pane> [<pane> ...]
+```
+
+On every emitted transition the watcher types one protocol line into the supervisor pane
+and submits it, which arrives as a new message and starts a supervision turn:
+
+```
+[sv-wake <pane> <STATE> <time>] supervised pane <pane> -> <STATE>; read its turn and continue.
+```
+
+Delivery guards (all inside `sv-watch.sh`, all verified against stubbed screens):
+minimum privilege by default — empty `SV_NUDGE_PANE` means log-only and changes nothing;
+a pane is never nudged about itself; the target is skipped when it is mid-turn (`esc
+interrupt`, i.e. the supervisor is awake already), when it shows a permission dialog
+(never inject into a dialog), or when its chrome is unrecognised (plain shells stay
+out — nudge currently targets opencode supervisor panes only). Emission stays
+edge-triggered, so one transition means at most one wake, never a stream.
+
+Supervisor-side, a `[sv-wake ...]` line is an event, not user chat: resolve the named
+pane back to its session and goal, read the session's own record, verify the artefact,
+send the next instruction — then return to waiting. Never answer it conversationally and
+never mistake it for a user instruction.
+
+If the supervisor itself runs outside tmux (a plain terminal or web session), there is
+no nudge target and the synchronous loop above is the whole engine — say so in the
+setup report rather than implying coverage the runtime cannot provide.
+
 **Your own verification can kill the watch.** Full test suites, browsers and dev servers
 run *by the supervisor* land on the same machine as the session's work. Starve it and the
 OS reaps background shells — the watcher first, because it is the cheapest thing to kill.

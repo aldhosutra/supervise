@@ -211,3 +211,34 @@ and everything slows down together, including the supervisor.
 and starts sampling, and it will not announce the moment it crossed over. A sampling
 supervisor is doing dispatch, which native subagents already handle better and more cheaply.
 Six sessions genuinely reviewed are worth more than sixty glanced at.
+
+## Your instrument lies before the app does
+
+A supervisor's job is to contradict the session's report, so a false accusation is the
+characteristic failure — and it almost always comes from the measurement, not the code.
+Three from a single day, each of which nearly became a filed bug:
+
+**`offsetParent` is null for `position: fixed`.** A toast was reported as "never shown"
+because `offsetParent` was null. It was fixed-positioned and perfectly visible. Use
+`getBoundingClientRect()` plus `visibility`, `display` and `opacity`; `offsetParent` answers
+a different question, and it is null for SVG elements too.
+
+**`getComputedStyle` returns the FROM value during a transition.** A grid whose columns
+were mid-transition reported the old track sizes for as long as the transition ran, so a
+working collapse looked stuck. Setting `style.transition = 'none'` and re-reading proved the
+rule had applied all along. Read geometry after the transition, or disable it to measure.
+
+**A screenshot can lag the DOM.** Two screenshots showed panels that the DOM said were
+present, with correct widths and positions. The next screenshot showed them. Anything
+captured through a browser extension is a frame from some past moment, not a synchronous
+read — and a CanvasKit canvas is worse, because a screenshot of it is not evidence about
+what it drew at all.
+
+The rule that falls out: **two independent instruments must agree before you report a
+defect.** Geometry and a fresh screenshot; or a DOM read and the emitted artifact. When they
+disagree, the disagreement is the finding — investigate the instrument first, because it is
+cheaper to be wrong about a tool than to send a session chasing a bug that is not there.
+
+And when you do report, say what you measured rather than what you concluded. "The input's
+`isConnected` went false after one keystroke" survives scrutiny; "typing is broken" does not,
+and the session cannot check it.
