@@ -357,12 +357,32 @@ opencode session with `--auto`.
 
 ## Long runs
 
-- **Reset context at natural seams**, rather than letting auto-compaction pick the moment
-  (`/clear` in Claude Code, a new session in opencode). A
-  session's stale context can hold superseded decisions, and a summary may carry the wrong
-  version forward. Before a `/clear`, have the session write down anything that exists only
-  in its head; afterwards, hand it nothing but a pointer to its standing instructions and
-  treat that as a test of whether the project's own documentation is sufficient.
+- **Reset context on purpose, before auto-compaction does it for you.** A session's
+  stale context holds superseded decisions, and an auto-compact summary may carry the
+  wrong version forward. Reset WHEN any of these is true, whichever comes first:
+  - the session just committed a completed unit of work (a task, a card, a milestone) and
+    is about to start the next one — the commit is the seam;
+  - context pressure is building (roughly past half of the window — the TUI shows the
+    percentage in its footer) and a fresh unit of work is ahead;
+  - you see staleness symptoms: the session re-asks something already decided, contradicts
+    its own standing instructions, or retries a failed approach verbatim.
+  Never reset mid-turn or with uncommitted work: the reset precondition is a clean tree
+  (or a commit you just made) plus the open state written down where it survives — the
+  standing-instructions file, updated with what is done and what is next.
+- **Reset mechanics differ by agent — use the right one.**
+  - *Claude Code:* `/clear` keeps the session id (the transcript path changes, so
+    re-resolve afterwards and never cache a transcript path across one).
+  - *opencode:* `/new` (alias `/clear`, keybind `ctrl+x n`) starts a genuinely NEW
+    session with a new id. Two consequences: re-run `sv-resolve.py --list` after the
+    first instruction lands (until then the pane maps to the *previous* session by
+    `cwd+recency`, which is the wrong one — send something, then re-resolve), and keep
+    supervising by pane, not by cached session id.
+  - *After either reset:* hand the session nothing but a pointer to its standing
+    instructions (`Read tmp/supervisor/NEXT.md and follow it.`) and require it to restate
+    its goal and next step before touching code. That restatement is the test: if a
+    freshly reset session cannot pick the work back up, the project's own documentation
+    was insufficient, and you found that out at a moment you chose. Clear a session
+    whose knowledge lived only in its context and you have lobotomised it.
 - **Keep the standing instructions in a file the session re-reads**, not in the conversation.
   That file is what survives a reset — and it is the precondition that makes resetting safe
   rather than destructive. Clear a session whose knowledge lived only in its context and you
