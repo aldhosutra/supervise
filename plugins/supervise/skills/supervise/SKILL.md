@@ -19,9 +19,11 @@ differ — how much text can be sent at once, above all — the difference is ca
 
 `/supervise <session-id> [<session-id> ...]`
 
-If no ids were given, run `scripts/sv-floor.py` — one call listing every agent pane with
-its harness, state and session — and ask which to supervise. Do not go spelunking through
-the process tree or the agent's database to work that out; that is the whole discovery step.
+If no ids were given, run `scripts/sv-floor.py` — **one call** listing every agent pane
+with its harness, state and session — and ask which to supervise. That single call is the
+whole discovery step: it already reports each pane's state and session, so do **not** also
+run `sv-resolve.py`, `sv-state.sh` or `capture-pane` per pane, and never open the agent's
+database or process tree yourself. Discover, then send.
 
 ## Setup, before supervising anything
 
@@ -89,7 +91,9 @@ starting.
 
 - **`monitor`** — a Claude Code supervisor. The harness wakes you.
 - **`tmux-nudge`** — an opencode supervisor inside tmux. The watcher wakes you by typing
-  into your own pane.
+  into your own pane. If `supervisor_url` is null (a hand-opened TUI with no `--port`), wakes
+  are sent **unconfirmed**; for an unattended run, relaunch the supervisor with
+  `sv-launch.sh <name> <dir> --agent opencode`, which pins the port that makes them provable.
 - **`sync`** — nothing can wake you: opencode outside tmux, or an unknown harness.
   **Warn the user and offer the synchronous loop** below. For opencode the fix is to
   relaunch the supervisor inside tmux, where `sv-launch.sh` pins the port that makes wakes
@@ -377,6 +381,26 @@ opencode session with `--auto`.
   nudge it. Not a stall.
 - **Fix your own instructions when a session trips over them.** If it had to work around
   something you told it, the instruction was wrong.
+
+## Commands
+
+The whole surface; you do not need to read the scripts to use them.
+
+```text
+sv-capability.py                         monitor | tmux-nudge | sync, and your own pane
+sv-floor.py                              every agent pane: harness, state, session (one call)
+sv-resolve.py --pane <pane>              resolve one pane to its session/transcript
+sv-resolve.py --list                     every session and the pane it maps to
+sv-state.sh <pane>                       BUSY | IDLE | PROMPT | UNKNOWN | GONE
+sv-read.py --pane <pane> --wait          block until the reply is done, then print it
+sv-read.py --session <id> --turns 2      read from the record (transcript/API/DB)
+sv-send.sh <pane> "text"                 deliver an instruction, verified, then submit
+sv-send.sh <pane> --file <path>          send a whole file (opencode)
+sv-watch.sh <pane> ...                   one line per state change; wakes the supervisor
+sv-launch.sh <name> <dir> --agent <a>    start a session in tmux; prints how to attach
+sv-nudge.py --pane <own> --token <t> ... the wake delivery the watcher uses
+sv-selftest.py                           smoke test for all of the above
+```
 
 ## Reference
 

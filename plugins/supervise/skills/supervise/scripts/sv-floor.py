@@ -69,6 +69,8 @@ def main():
     for r in rows:
         print(f"{r['pane']:12} {r['harness']:9} {r['state']:7} "
               f"{str(r['session_id'] or '-'):36} {str(r['how'] or '-'):12} {r['cwd']}")
+    print(f"\n# {len(rows)} agent pane(s) — state and session are included above, so there is")
+    print("# nothing more to resolve. Send to a pane to bind a fresh session, then read with --wait.")
 
 
 if __name__ == "__main__":
