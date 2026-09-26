@@ -14,21 +14,34 @@ restart it with `--resume`.
 
 ## An opencode pane resolves but `base_url` is null
 
-Only an opencode TUI started with an explicit `--port` listens on TCP. A TUI opened by hand
-takes the default port `0`, and in 1.18.x that means no TCP listener at all — `lsof` finds
-nothing to talk to. This is not fatal to every operation:
+Only a TUI started with an explicit `--port` listens on TCP; a hand-opened one takes port
+`0` and serves no HTTP. That is no longer a dead end, because opencode writes every session
+to one SQLite database whether or not it has a server:
 
-- **State** still works: `sv-state.sh` falls back to reading the pane's chrome.
-- **Sending** still works if it goes through the pane: that is exactly the channel
-  `sv-watch.sh` uses to wake an opencode supervisor, and it needs no server.
-- **Reading history and confirming a wake do not.** `sv-read.py` and `sv-send.sh` need the
-  server, and `sv-nudge.py` can only confirm a wake when given `SV_NUDGE_URL`.
+- **State** works without the server: `sv-state.sh` reads the pane's chrome.
+- **Reading** goes to the database (`sv-read.py --pane`), which holds the same history the
+  API would have returned — not the lossy pane.
+- **Sending** is delivered through the pane and confirmed against the database
+  (`sv-send.sh`), so it is verified rather than assumed.
+- **Waking a supervisor** still needs the pane, and confirming a wake still needs
+  `SV_NUDGE_URL`; for a supervisor a pinned port remains what makes wakes provable.
 
-So restart a session you must read with `sv-launch.sh`, which always pins a port. For a
-supervisor, a pinned port is also what makes every wake provable rather than hoped-for.
+The database path comes from `opencode db path` (override with `SV_OPENCODE_DB`); reads are
+read-only and fall back to the pane if it cannot be opened. Restart the session with
+`sv-launch.sh` when you want the HTTP channel as well.
 
-The same symptom appears when opencode is running somewhere the `lsof` call cannot see the
-process — inside a container, say, or under a different user.
+The same symptom appears when opencode runs where `lsof` cannot see the process — in a
+container, say, or under another user. The database may still be readable there.
+
+## A pane runs neither Claude Code nor opencode
+
+`sv_detect.py --all` reports the harness of every pane: `claude`, `opencode`, or `other`
+(codex, aider, gemini, cursor-agent, and similar). An `other` pane is not misreported as
+gone — its state is `UNKNOWN`, and it can be driven best-effort through the pane
+(`sv-send.sh` types, `sv-read.py --pane` reads the screen behind a LOSSY warning). There is
+no transcript and no server, so sends are unverified and a read is the tail, not the answer.
+If you supervise one regularly, write an adapter for it. A pane whose process is not a known
+agent at all (a shell, an editor) reads as `GONE`: there is nothing to supervise there.
 
 ## An opencode session is resolved as `cwd+recency` and reads the wrong conversation
 

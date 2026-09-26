@@ -12,6 +12,11 @@ agent="$(python3 "$HERE/lib/sv_detect.py" --pane "$PANE" --field agent 2>/dev/nu
 case "$agent" in
   claude)   exec "$HERE/adapters/claude/state.sh" "$PANE" ;;
   opencode) exec python3 "$HERE/adapters/opencode/state.py" "$PANE" ;;
+  other)
+    # A live agent we can see but cannot classify. UNKNOWN, never GONE: a pane
+    # that is running something is not a pane that has disappeared.
+    tmux capture-pane -p -t "$PANE" >/dev/null 2>&1 || { echo GONE; exit 3; }
+    echo UNKNOWN; exit 4 ;;
   "")
     # No agent process under the pane. Either the pane is gone, or something
     # else is running there - both mean there is nothing to supervise.

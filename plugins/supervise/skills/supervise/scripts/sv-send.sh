@@ -31,6 +31,9 @@ case "$agent" in
     exec "$HERE/adapters/claude/send.sh" "$PANE" "${1:?usage: sv-send.sh <pane> <text>}" ;;
   opencode)
     exec python3 "$HERE/adapters/opencode/send.py" "$PANE" "$@" ;;
+  other)
+    # Seen but not read: drive it best-effort through the pane.
+    exec python3 "$HERE/adapters/generic/send.py" "$PANE" "$@" ;;
   "")
     echo "REFUSED: no supervisable agent is running in pane $PANE" >&2; exit 3 ;;
   *)

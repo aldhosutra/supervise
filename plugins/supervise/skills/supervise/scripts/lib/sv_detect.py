@@ -17,8 +17,16 @@ import re
 import subprocess
 import sys
 
-# Process basenames we recognise, mapped to the adapter that handles them.
-AGENT_BINARIES = {"claude": "claude", "opencode": "opencode"}
+# Agents with a real adapter: a transcript file (Claude Code) or a server (opencode).
+ADAPTER_BINARIES = {"claude": "claude", "opencode": "opencode"}
+# Other agent CLIs we can see but not read. They are reported honestly as harness
+# "other" (and driven best-effort over the pane) rather than misreported as gone.
+OTHER_BINARIES = {
+    "codex", "aider", "gemini", "cursor-agent", "goose", "crush", "amp",
+    "droid", "qwen", "copilot", "opencode-go",
+}
+# basename -> harness
+AGENT_BINARIES = {**ADAPTER_BINARIES, **{b: "other" for b in OTHER_BINARIES}}
 
 
 def run(cmd, timeout=10):
@@ -115,6 +123,7 @@ def describe(pane):
     agent = procs[0]["agent"]
     procs = [p for p in procs if p["agent"] == agent]
     info = {"pane": pane["pane"], "cwd": pane["path"], "agent": agent,
+            "harness": agent, "name": basename_of(procs[0]["cmd"]),
             "pid": procs[0]["pid"], "cmd": procs[0]["cmd"], "port": None,
             "base_url": None}
     if agent == "opencode":

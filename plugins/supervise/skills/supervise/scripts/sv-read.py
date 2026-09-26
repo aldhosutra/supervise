@@ -47,6 +47,11 @@ def main():
         if info is None:
             sys.exit(f"no supervisable agent is running in pane {args.pane}")
         agent = info["agent"]
+        if agent == "other":
+            # No transcript, no server: the pane is all there is, read as lossy.
+            sys.exit(subprocess.run(
+                [sys.executable, os.path.join(HERE, "adapters", "generic", "read.py"),
+                 "--pane", args.pane]).returncode)
         passthrough = ["--pane", args.pane] if agent == "opencode" else []
         if not passthrough:
             # The Claude adapter reads by session, so turn the pane into one.

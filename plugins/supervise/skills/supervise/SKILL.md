@@ -39,6 +39,12 @@ where its output can be read, the tmux pane, and `cleared_since`.
   wrong for a TUI opened in a directory that already has history until the first message
   lands. Send something, then re-resolve.
 
+Each pane's harness is detected from the process it runs (`scripts/sv_detect.py --all`):
+`claude`, `opencode`, or `other`. Claude Code and opencode get full support — a pinned-port
+opencode reads over its server, a hand-opened one over its SQLite database, and a mixed
+floor works with one watcher. An `other` agent (codex, aider, gemini, …) is best-effort over
+the pane only: `UNKNOWN` state, unverified sends, lossy reads. See `references/troubleshooting.md`.
+
 **2. Confirm each one has a pane.** A null `pane` means it is not in tmux, or not running.
 
 **If it needs launching, launch it — and tell the user how to watch it.**

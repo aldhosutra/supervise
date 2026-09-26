@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "..", "lib"))
 
 import sv_detect  # noqa: E402
 import sv_opencode as oc  # noqa: E402
+import sv_pane  # noqa: E402
 from state import classify  # noqa: E402
 
 
@@ -61,9 +62,27 @@ def main():
         print(f"REFUSED: no opencode session in pane {args.pane}", file=sys.stderr)
         sys.exit(3)
     if not info["base_url"]:
-        print(f"REFUSED: cannot find the server for pane {args.pane}. Start it with "
-              "sv-launch.sh, which pins a port.", file=sys.stderr)
-        sys.exit(3)
+        # A TUI started without --port serves no HTTP, but opencode still writes
+        # the message to its database. Deliver through the pane and confirm
+        # against that database rather than guessing.
+        ok, note = sv_pane.send(args.pane, text)
+        if not ok:
+            print(f"REFUSED: {note}", file=sys.stderr)
+            sys.exit(2 if "dialog" in note else 3)
+        import sv_opencode_db as db
+        session_id = db.latest_session(info.get("cwd") or "")
+        deadline = time.time() + float(os.environ.get("SV_SEND_CONFIRM_SECONDS", "15"))
+        while session_id and time.time() < deadline:
+            time.sleep(1.5)
+            try:
+                if text.strip()[:60] in db.last_user_text(session_id):
+                    print(f"VERIFIED via db ({len(text)} chars) -> {args.pane} "
+                          f"[{session_id}]")
+                    return
+            except Exception:
+                break
+        print(f"{note} -> {args.pane} [opencode, no server]")
+        return
     base = info["base_url"]
 
     state = classify(args.pane)
