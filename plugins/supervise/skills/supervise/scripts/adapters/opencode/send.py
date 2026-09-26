@@ -70,7 +70,7 @@ def main():
         import sv_opencode_db as db
         cwd = info.get("cwd") or ""
         before = {sid for sid, _ in db.sessions_in(cwd)}
-        bound = (bind.get(args.pane) or {}).get("session_id")
+        bound = (bind.valid(args.pane, "opencode") or {}).get("session_id")
         ok, note = sv_pane.send(args.pane, text)
         if not ok:
             print(f"REFUSED: {note}", file=sys.stderr)

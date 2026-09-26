@@ -382,6 +382,7 @@ opencode session with `--auto`.
 
 - `scripts/sv-capability.py` — how this supervisor can be woken, if at all, and its own pane.
 - `scripts/sv-floor.py` — every agent pane with its harness, state and session, in one call.
+- `scripts/sv-selftest.py` — a smoke test for the primitives above; run it after any change.
 - `scripts/sv-launch.sh` — start a session in tmux and report how to watch it.
 - `scripts/sv-nudge.py` — send one wake into the supervisor's pane and confirm it landed.
 - `references/policy.md` — the reasoning behind the rules above, and the failure modes this

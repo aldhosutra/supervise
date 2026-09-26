@@ -50,7 +50,7 @@ def rows():
                "pid": pane["pid"], "session_id": None, "title": None,
                "reachable": False, "how": None}
         if not pane["base_url"]:
-            b = bind.get(pane["pane"]) or {}
+            b = bind.valid(pane["pane"], "opencode") or {}
             if b.get("agent") == "opencode" and b.get("session_id"):
                 row["session_id"] = b["session_id"]
                 row["how"] = "binding"
@@ -87,7 +87,7 @@ def find(session_id=None, pane_id=None):
         if pane_id and pane["pane"] != pane_id:
             continue
         if not pane["base_url"]:
-            b = bind.get(pane["pane"]) or {}
+            b = bind.valid(pane["pane"], "opencode") or {}
             bound = b.get("session_id") if b.get("agent") == "opencode" else None
             placeholder = {"id": bound, "directory": pane["cwd"], "title": None}
             if pane_id:

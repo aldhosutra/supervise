@@ -140,7 +140,7 @@ def map_panes(sessions):
         if pid is None:
             continue
         entry = {**pane, "claude_pid": pid, "cmd": cmd, "bridge": None, "how": None}
-        b = bind.get(pane["pane"]) or {}
+        b = bind.valid(pane["pane"], "claude") or {}
         m = re.search(r"--resume\s+([0-9a-f-]{36})", cmd or "")
         if m and m.group(1) in by_id:
             entry["bridge"] = by_id[m.group(1)]["bridge"]
@@ -221,7 +221,7 @@ def main():
         bridge = pane_here["bridge"]
         match = active_for(bridge, sessions)
         if not match:
-            b = bind.get(args.pane) or {}
+            b = bind.valid(args.pane, "claude") or {}
             if b.get("session_id"):
                 match = next((s for s in sessions
                               if s["session_id"] == b["session_id"]), None)

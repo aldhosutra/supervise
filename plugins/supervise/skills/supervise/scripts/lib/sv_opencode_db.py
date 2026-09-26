@@ -72,6 +72,22 @@ def latest_session_row(directory):
     return {"id": rows[0][0], "directory": os.path.realpath(directory), "title": rows[0][1]}
 
 
+def session_exists(session_id):
+    """Whether a session id is still in the database.
+
+    Used to drop a stale pane binding. If the database cannot be read we return
+    True: refusing to invalidate on a transient error would keep a good binding.
+    """
+    if not session_id:
+        return False
+    try:
+        with _connect() as conn:
+            return conn.execute("select 1 from session where id=?",
+                                (session_id,)).fetchone() is not None
+    except Exception:
+        return True
+
+
 def messages(session_id):
     """Messages shaped like the API's: [{"info": {...}, "parts": [...]}, ...]."""
     with _connect() as conn:

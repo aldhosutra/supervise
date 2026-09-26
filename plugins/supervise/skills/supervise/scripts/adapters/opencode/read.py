@@ -182,7 +182,7 @@ def main():
             source = base
         else:
             cwd = (info or {}).get("cwd") or ""
-            bound = (bind.get(args.pane) or {}).get("session_id")
+            bound = (bind.valid(args.pane, "opencode") or {}).get("session_id")
             session_id = bound or db.latest_session(cwd)
             if not session_id:
                 lossy_pane(args.pane)

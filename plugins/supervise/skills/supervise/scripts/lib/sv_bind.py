@@ -64,6 +64,38 @@ def forget(pane):
         _save(data)
 
 
+def _exists(agent, session_id):
+    if not session_id:
+        return False
+    if agent == "opencode":
+        try:
+            import sv_opencode_db as db
+            return db.session_exists(session_id)
+        except Exception:
+            return True
+    if agent == "claude":
+        return bool(glob.glob(os.path.join(PROJECTS, "*", session_id + ".jsonl")))
+    return True
+
+
+def valid(pane, agent=None):
+    """The binding for a pane, or None if it is stale or the wrong agent.
+
+    A binding is only as good as the session it names still existing; a deleted
+    session or a pane reused by another agent must not keep resolving to it.
+    """
+    row = get(pane)
+    if not row:
+        return None
+    if agent and row.get("agent") != agent:
+        forget(pane)
+        return None
+    if not _exists(row.get("agent"), row.get("session_id")):
+        forget(pane)
+        return None
+    return row
+
+
 def discover_claude(cwd, text):
     """The newest Claude transcript in `cwd` whose text contains `text`.
 
