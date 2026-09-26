@@ -33,28 +33,43 @@ def _connect():
     return sqlite3.connect(f"file:{db_path()}?mode=ro", uri=True, timeout=5)
 
 
-def latest_session(directory):
-    """The newest session whose directory is this one, or None.
+def sessions_in(directory, limit=300):
+    """[(id, title)] for sessions in this directory, newest first.
 
     Session rows store the directory opencode was started in, which may or may
     not be canonicalised, so match on the basename in SQL and confirm with
     realpath in Python.
     """
     if not directory:
-        return None
+        return []
     want = os.path.realpath(directory)
     base = os.path.basename(want.rstrip("/")) or want
     with _connect() as conn:
         rows = conn.execute(
-            "select id, directory from session where directory like ? "
-            "order by rowid desc limit 300", ("%" + base,)).fetchall()
-    for session_id, stored in rows:
+            "select id, title, directory from session where directory like ? "
+            "order by rowid desc limit ?", ("%" + base, limit)).fetchall()
+    out = []
+    for session_id, title, stored in rows:
         try:
             if os.path.realpath(stored or "") == want:
-                return session_id
+                out.append((session_id, title))
         except Exception:
             continue
-    return None
+    return out
+
+
+def latest_session(directory):
+    """The newest session in this directory, or None."""
+    rows = sessions_in(directory, limit=1)
+    return rows[0][0] if rows else None
+
+
+def latest_session_row(directory):
+    """{"id","directory","title"} for the newest session in a directory, or None."""
+    rows = sessions_in(directory, limit=1)
+    if not rows:
+        return None
+    return {"id": rows[0][0], "directory": os.path.realpath(directory), "title": rows[0][1]}
 
 
 def messages(session_id):

@@ -63,24 +63,37 @@ def main():
         sys.exit(3)
     if not info["base_url"]:
         # A TUI started without --port serves no HTTP, but opencode still writes
-        # the message to its database. Deliver through the pane and confirm
-        # against that database rather than guessing.
+        # the message to its database. Deliver through the pane, confirm against
+        # the database, and bind the pane to the session so later commands stop
+        # guessing between sessions that share a directory.
+        import sv_bind as bind
+        import sv_opencode_db as db
+        cwd = info.get("cwd") or ""
+        before = {sid for sid, _ in db.sessions_in(cwd)}
+        bound = (bind.get(args.pane) or {}).get("session_id")
         ok, note = sv_pane.send(args.pane, text)
         if not ok:
             print(f"REFUSED: {note}", file=sys.stderr)
             sys.exit(2 if "dialog" in note else 3)
-        import sv_opencode_db as db
-        session_id = db.latest_session(info.get("cwd") or "")
+        needle = text.strip()[:60]
         deadline = time.time() + float(os.environ.get("SV_SEND_CONFIRM_SECONDS", "15"))
-        while session_id and time.time() < deadline:
+        while time.time() < deadline:
             time.sleep(1.5)
             try:
-                if text.strip()[:60] in db.last_user_text(session_id):
-                    print(f"VERIFIED via db ({len(text)} chars) -> {args.pane} "
-                          f"[{session_id}]")
-                    return
+                current = db.sessions_in(cwd)
             except Exception:
-                break
+                current = []
+            # A session created by this send is certainly this pane's; else the
+            # one bound before; else whichever session holds the text we sent.
+            fresh = [sid for sid, _ in current if sid not in before]
+            candidate = fresh[0] if fresh else bound
+            if not candidate:
+                candidate = next((sid for sid, _ in current
+                                  if needle and needle in db.last_user_text(sid)), None)
+            if candidate and needle in db.last_user_text(candidate):
+                bind.put(args.pane, candidate, "opencode", "send")
+                print(f"VERIFIED via db ({len(text)} chars) -> {args.pane} [{candidate}]")
+                return
         print(f"{note} -> {args.pane} [opencode, no server]")
         return
     base = info["base_url"]

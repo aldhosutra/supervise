@@ -22,10 +22,23 @@ sys.path.insert(0, os.path.join(HERE, "..", "..", "lib"))
 
 import sv_detect  # noqa: E402
 import sv_opencode as oc  # noqa: E402
+import sv_bind as bind  # noqa: E402
+import sv_opencode_db as db  # noqa: E402
 
 
 def live_panes():
     return [p for p in sv_detect.all_agent_panes() if p["agent"] == "opencode"]
+
+
+def _solo_no_server(pane, panes=None):
+    """True when this pane is the only server-less opencode pane in its cwd.
+
+    Then "newest session in that directory" is meaningful; otherwise several
+    panes collapse to the same guess and pretending otherwise maps wrong.
+    """
+    panes = panes if panes is not None else live_panes()
+    mine = [p for p in panes if p["cwd"] == pane["cwd"] and not p["base_url"]]
+    return len(mine) == 1
 
 
 def rows():
@@ -37,7 +50,19 @@ def rows():
                "pid": pane["pid"], "session_id": None, "title": None,
                "reachable": False, "how": None}
         if not pane["base_url"]:
-            row["how"] = "no-server"
+            b = bind.get(pane["pane"]) or {}
+            if b.get("agent") == "opencode" and b.get("session_id"):
+                row["session_id"] = b["session_id"]
+                row["how"] = "binding"
+            elif _solo_no_server(pane):
+                guess = db.latest_session(pane["cwd"])
+                if guess:
+                    row["session_id"] = guess
+                    row["how"] = "db-guess"
+                else:
+                    row["how"] = "no-server"
+            else:
+                row["how"] = "no-server"
             out.append(row)
             continue
         try:
@@ -62,8 +87,24 @@ def find(session_id=None, pane_id=None):
         if pane_id and pane["pane"] != pane_id:
             continue
         if not pane["base_url"]:
+            b = bind.get(pane["pane"]) or {}
+            bound = b.get("session_id") if b.get("agent") == "opencode" else None
+            placeholder = {"id": bound, "directory": pane["cwd"], "title": None}
             if pane_id:
+                if bound:
+                    return pane, placeholder, "binding"
+                if _solo_no_server(pane):
+                    sess = db.latest_session_row(pane["cwd"])
+                    if sess:
+                        return pane, sess, "db"
                 return pane, None, "no-server"
+            if session_id:
+                if bound == session_id:
+                    return pane, placeholder, "binding"
+                if _solo_no_server(pane):
+                    sess = db.latest_session_row(pane["cwd"])
+                    if sess and sess["id"] == session_id:
+                        return pane, sess, "db"
             continue
         try:
             if session_id:

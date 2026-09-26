@@ -14,6 +14,10 @@ and it finds the currently-active transcript for that terminal.
 """
 import argparse, glob, json, os, re, subprocess, sys
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, "..", "..", "lib"))
+import sv_bind as bind  # noqa: E402
+
 PROJECTS = os.path.expanduser("~/.claude/projects")
 
 
@@ -125,16 +129,29 @@ def map_panes(sessions):
     """
     table = process_table()
     by_id = {s["session_id"]: s for s in sessions}
+    by_sid = {s["session_id"]: s for s in sessions}
+    panes = tmux_panes()
+    shared = {}
+    for p in panes:
+        shared[p["path"]] = shared.get(p["path"], 0) + 1
     mapped = []
-    for pane in tmux_panes():
+    for pane in panes:
         pid, cmd = claude_in_pane(pane["pane_pid"], table)
         if pid is None:
             continue
         entry = {**pane, "claude_pid": pid, "cmd": cmd, "bridge": None, "how": None}
+        b = bind.get(pane["pane"]) or {}
         m = re.search(r"--resume\s+([0-9a-f-]{36})", cmd or "")
         if m and m.group(1) in by_id:
             entry["bridge"] = by_id[m.group(1)]["bridge"]
             entry["how"] = "resume-flag"
+        elif b.get("agent") == "claude" and b.get("session_id") in by_sid:
+            entry["bridge"] = by_sid[b["session_id"]]["bridge"]
+            entry["how"] = "binding"
+        elif shared.get(pane["path"], 0) > 1:
+            # Several Claude panes in one directory: cwd+recency would name the
+            # same session for all of them. Say ambiguous rather than guess.
+            entry["how"] = "ambiguous"
         else:
             here = [s for s in sessions if s["cwd"] == pane["path"]]
             if here:
@@ -203,6 +220,13 @@ def main():
             sys.exit(f"no Claude session is running in pane {args.pane}")
         bridge = pane_here["bridge"]
         match = active_for(bridge, sessions)
+        if not match:
+            b = bind.get(args.pane) or {}
+            if b.get("session_id"):
+                match = next((s for s in sessions
+                              if s["session_id"] == b["session_id"]), None)
+                if match:
+                    bridge = match["bridge"]
         if not match:
             sys.exit(f"pane {args.pane} has not written a transcript yet")
     elif args.session:

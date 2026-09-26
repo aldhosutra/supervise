@@ -19,8 +19,9 @@ differ — how much text can be sent at once, above all — the difference is ca
 
 `/supervise <session-id> [<session-id> ...]`
 
-If no ids were given, run `scripts/sv-resolve.py --list`, show the sessions that map to a
-tmux pane, and ask which to supervise.
+If no ids were given, run `scripts/sv-floor.py` — one call listing every agent pane with
+its harness, state and session — and ask which to supervise. Do not go spelunking through
+the process tree or the agent's database to work that out; that is the whole discovery step.
 
 ## Setup, before supervising anything
 
@@ -38,6 +39,11 @@ where its output can be read, the tmux pane, and `cleared_since`.
   the server naming the session it is running, which is certain; `cwd+recency` is a guess,
   wrong for a TUI opened in a directory that already has history until the first message
   lands. Send something, then re-resolve.
+
+A fresh pane in a directory that already has history can resolve as `-` or a `db-guess`,
+because several sessions then look identical. Sending it one line fixes that: `sv-send.sh`
+binds the pane to the session it created, so afterwards `sv-resolve.py --pane` is exact and
+`sv-read.py --pane <pane> --wait` reads the next reply without guessing or hand-polling.
 
 Each pane's harness is detected from the process it runs (`scripts/sv_detect.py --all`):
 `claude`, `opencode`, or `other`. Claude Code and opencode get full support — a pinned-port
@@ -219,9 +225,10 @@ for strays at the end of a long run. Detail in `references/troubleshooting.md`.
 On every wake, for the session that changed:
 
 1. **Read the session's own record, never the pane.** `scripts/sv-read.py --session <id>
-   --turns 1`, or `--pane <pane>`. The pane is a lossy render and long replies scroll out
-   of it; relaying a trimmed tail as the whole answer is the worst thing you can do in this
-   role.
+   --turns 1`, or `--pane <pane>`. Add `--wait` to block until the turn's reply is complete
+   first — that is the whole "wait for the reply" step, never a hand-written poll loop. The
+   pane is a lossy render and long replies scroll out of it; relaying a trimmed tail as the
+   whole answer is the worst thing you can do in this role.
 2. **Check preconditions** the work depends on — services up, database reachable, disk
    present. A session that cannot commit because Docker is down will blame its own code.
 3. **Review what it claims.** See "Verify, don't relay".
@@ -374,6 +381,7 @@ opencode session with `--auto`.
 ## Reference
 
 - `scripts/sv-capability.py` — how this supervisor can be woken, if at all, and its own pane.
+- `scripts/sv-floor.py` — every agent pane with its harness, state and session, in one call.
 - `scripts/sv-launch.sh` — start a session in tmux and report how to watch it.
 - `scripts/sv-nudge.py` — send one wake into the supervisor's pane and confirm it landed.
 - `references/policy.md` — the reasoning behind the rules above, and the failure modes this

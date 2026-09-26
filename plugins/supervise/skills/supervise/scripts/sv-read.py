@@ -36,6 +36,10 @@ def main():
     ap.add_argument("--turns", type=int, default=1)
     ap.add_argument("--tools", action="store_true")
     ap.add_argument("--sentinel", action="store_true")
+    ap.add_argument("--wait", action="store_true",
+                    help="block until a fresh completed reply, then print it")
+    ap.add_argument("--wait-timeout", type=float,
+                    default=float(os.environ.get("SV_WAIT_SECONDS", "120")))
     args = ap.parse_args()
 
     if args.transcript:
@@ -73,6 +77,8 @@ def main():
         passthrough.append("--tools")
     if args.sentinel:
         passthrough.append("--sentinel")
+    if args.wait:
+        passthrough += ["--wait", "--wait-timeout", str(args.wait_timeout)]
 
     sys.exit(subprocess.run([sys.executable, ADAPTERS[agent]] + passthrough).returncode)
 

@@ -34,3 +34,16 @@ if [[ "$got" != *"$TEXT"* ]]; then
 fi
 echo "VERIFIED (${#TEXT} chars) -> $PANE"
 tmux send-keys -t "$PANE" Enter
+
+# Bind the pane to the session it just created. A fresh Claude pane in a directory
+# with history has no transcript link until a message lands; the line we just
+# typed is now in exactly one transcript, so record that as the pane's session.
+BIND="$(cd "$(dirname "$0")/../.." && pwd)/lib/sv_bind.py"
+cwd="$(tmux display-message -p -t "$PANE" '#{pane_current_path}' 2>/dev/null)"
+if [ -n "$cwd" ] && [ -n "$TEXT" ]; then
+  for _ in 1 2 3 4 5; do
+    python3 "$BIND" --discover-claude --pane "$PANE" --cwd "$cwd" --text "$TEXT" \
+      >/dev/null 2>&1 && break
+    sleep 1
+  done
+fi

@@ -3,12 +3,15 @@
 
 Same rule as the Claude adapter: never read a session's output from the pane if a
 real record exists. With a server, that record is the message history the server
-holds. Without one — the TUI was started without `--port` — opencode still wrote
-the same history into its SQLite database, so read that instead. The pane is the
-last resort, and the only one that is lossy, so it is labelled as such.
+holds; without one, opencode still wrote the same history into its SQLite
+database, so read that. The pane is the last resort, and the only lossy one.
 
-  read.py --session ses_...              last assistant turn
+`--wait` blocks until a fresh assistant turn finishes and then prints it, so a
+supervisor never hand-rolls a poll loop.
+
+  read.py --session ses_...              last assistant turn (API or DB)
   read.py --pane work:0.1 --turns 3
+  read.py --pane work:0.1 --wait         wait for the next completed reply
   read.py --session ses_... --tools      include tool-call names
 """
 import argparse
@@ -17,31 +20,61 @@ import os
 import re
 import subprocess
 import sys
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "lib"))
 
+import sv_bind as bind  # noqa: E402
 import sv_opencode as oc  # noqa: E402
 import sv_opencode_db as db  # noqa: E402
 import sv_pane  # noqa: E402
 
 
-def resolve(session_id=None, pane=None):
+def try_resolve(session_id=None, pane=None):
     cmd = [sys.executable, os.path.join(HERE, "resolve.py")]
     cmd += ["--session", session_id] if session_id else ["--pane", pane]
     out = subprocess.run(cmd, capture_output=True, text=True)
     if out.returncode != 0:
-        sys.exit(out.stderr.strip() or "cannot resolve that opencode session")
-    return json.loads(out.stdout)
+        return None
+    try:
+        return json.loads(out.stdout)
+    except ValueError:
+        return None
+
+
+def _role(message):
+    return (message.get("info", {}) or {}).get("role")
+
+
+def _completed(message):
+    return bool(((message.get("info", {}) or {}).get("time", {}) or {}).get("completed"))
+
+
+def wait_for_reply(history_fn, timeout):
+    """Block until the latest user message has a completed assistant reply.
+
+    Keyed to the last *user* message, not to a wall-clock mark: by the time a
+    sender has confirmed its prompt, the reply may already be finished, and a
+    "wait for something new" rule would then block forever.
+    """
+    deadline = time.time() + timeout
+    while True:
+        messages = history_fn()
+        last_user = None
+        for i, message in enumerate(messages):
+            if _role(message) == "user":
+                last_user = i
+        if last_user is not None:
+            for message in messages[last_user + 1:]:
+                if _role(message) == "assistant" and _completed(message):
+                    return messages
+        if time.time() >= deadline:
+            return messages
+        time.sleep(1.0)
 
 
 def text_of(message, with_tools):
-    """Flatten one message's parts into readable text.
-
-    opencode splits a message into parts: text, reasoning, tool calls, and step
-    markers. Only text is the answer; the rest is machinery, and the caller opts
-    into seeing which tools ran.
-    """
     chunks = []
     for part in message.get("parts", []) or []:
         kind = part.get("type")
@@ -68,7 +101,6 @@ def turns_of(messages, with_tools):
         elif role == "assistant" and current is not None:
             if body.strip():
                 current["assistant"].append(body)
-            # No completion timestamp means this turn is still being written.
             if not (info.get("time", {}) or {}).get("completed"):
                 current["running"] = True
     if current:
@@ -101,7 +133,7 @@ def emit(turns, session_id, source, args):
     print(f"[{session_id}, {len(turns)} turns, via {source}]")
 
 
-def lossy_pane(pane, args):
+def lossy_pane(pane):
     try:
         text = sv_pane.read(pane)
     except sv_pane.PaneError as exc:
@@ -119,33 +151,46 @@ def main():
     ap.add_argument("--turns", type=int, default=1)
     ap.add_argument("--tools", action="store_true")
     ap.add_argument("--sentinel", action="store_true")
+    ap.add_argument("--wait", action="store_true")
+    ap.add_argument("--wait-timeout", type=float,
+                    default=float(os.environ.get("SV_WAIT_SECONDS", "120")))
     args = ap.parse_args()
 
     if not (args.session or args.pane):
         sys.exit("give --session <id> or --pane <pane>")
 
-    info = resolve(args.session, args.pane)
-    cwd = info.get("cwd") or ""
-
-    if info.get("base_url"):
-        session_id = info["active_session_id"]
-        if not session_id:
-            sys.exit(f"pane {info['pane']} has no opencode session yet — "
-                     "send it something first")
-        try:
-            history = oc.messages(info["base_url"], session_id)
-        except oc.OpencodeError as exc:
-            sys.exit(f"cannot read the session: {exc}")
-        source = info["base_url"]
+    if args.session:
+        info = try_resolve(session_id=args.session)
+        if info and info.get("base_url"):
+            session_id = info["active_session_id"] or args.session
+            base = info["base_url"]
+            history_fn = lambda: oc.messages(base, session_id)   # noqa: E731
+            source = base
+        else:
+            session_id = args.session
+            history_fn = lambda: db.messages(session_id)          # noqa: E731
+            source = "db (no server)"
     else:
-        # No server: opencode still wrote the history to its database.
-        session_id = db.latest_session(cwd)
-        if not session_id:
-            lossy_pane(info["pane"], args)
-            return
-        history = db.messages(session_id)
-        source = "db (no server)"
+        info = try_resolve(pane=args.pane)
+        if info and info.get("base_url"):
+            session_id = info["active_session_id"]
+            if not session_id:
+                sys.exit(f"pane {args.pane} has no opencode session yet — "
+                         "send it something first")
+            base = info["base_url"]
+            history_fn = lambda: oc.messages(base, session_id)   # noqa: E731
+            source = base
+        else:
+            cwd = (info or {}).get("cwd") or ""
+            bound = (bind.get(args.pane) or {}).get("session_id")
+            session_id = bound or db.latest_session(cwd)
+            if not session_id:
+                lossy_pane(args.pane)
+                return
+            history_fn = lambda: db.messages(session_id)          # noqa: E731
+            source = "db (binding)" if bound else "db (no server)"
 
+    history = wait_for_reply(history_fn, args.wait_timeout) if args.wait else history_fn()
     turns = turns_of(history, args.tools)
     if not turns:
         sys.exit("no turns found in that session")

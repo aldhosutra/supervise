@@ -11,9 +11,46 @@ transcript on disk is the ground truth.
   sv-read.py --transcript <path> --tools  include tool-call names
   sv-read.py --session <id> --sentinel    print any <<<...>>> markers only
 """
-import argparse, json, os, re, subprocess, sys
+import argparse, json, os, re, subprocess, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def wait_for_reply(path, timeout):
+    """Block until the latest user turn has a completed assistant reply."""
+    def replied():
+        events = []
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                try:
+                    d = json.loads(line)
+                except ValueError:
+                    continue
+                kind = d.get("type")
+                if kind not in ("user", "assistant"):
+                    continue
+                msg = d.get("message", {}) or {}
+                content = msg.get("content")
+                if kind == "user" and isinstance(content, list) and any(
+                        isinstance(b, dict) and b.get("type") == "tool_result"
+                        for b in content):
+                    continue
+                events.append((kind, msg.get("stop_reason") if kind == "assistant" else None))
+        last_user = None
+        for i, (kind, _) in enumerate(events):
+            if kind == "user":
+                last_user = i
+        if last_user is None:
+            return False
+        return any(kind == "assistant" and stop for kind, stop in events[last_user + 1:])
+
+    deadline = time.time() + timeout
+    while True:
+        if replied():
+            return
+        if time.time() >= deadline:
+            return
+        time.sleep(1.0)
 
 
 def resolve(session_id):
@@ -82,6 +119,9 @@ def main():
     ap.add_argument("--turns", type=int, default=1)
     ap.add_argument("--tools", action="store_true")
     ap.add_argument("--sentinel", action="store_true")
+    ap.add_argument("--wait", action="store_true")
+    ap.add_argument("--wait-timeout", type=float,
+                    default=float(os.environ.get("SV_WAIT_SECONDS", "120")))
     args = ap.parse_args()
 
     if args.transcript:
@@ -93,6 +133,9 @@ def main():
                 f"{info['active_session_id']}]" if info["cleared_since"] else "")
     else:
         sys.exit("give --session <id> or --transcript <path>")
+
+    if args.wait:
+        wait_for_reply(path, args.wait_timeout)
 
     turns = turns_of(path, args.tools)
     if not turns:
