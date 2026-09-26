@@ -1,7 +1,7 @@
 {
   "name": "supervise",
   "description": "Supervise one or more running coding-agent sessions (Claude Code or opencode) in tmux until their goals are met. Reads each session's real output from its own records rather than the terminal, verifies instructions arrive intact, reviews the work produced, and escalates only what genuinely needs a human.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": {
     "name": "Aldo Suhartono Putra",
     "url": "https://github.com/aldhosutra"

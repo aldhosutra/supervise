@@ -159,9 +159,11 @@ Useful on their own:
 
 ```bash
 sv-capability.py                       # can this supervisor be woken, and how
+sv-floor.py                            # every agent pane: harness, state, session
 sv-launch.sh work ~/code/myproject     # start a session, print how to attach
 sv-resolve.py --list                   # every session ↔ its tmux pane
 sv-state.sh work:0.0                   # BUSY | IDLE | PROMPT | UNKNOWN | GONE
+sv-read.py --pane work:0.0 --wait      # block until the reply is done, then read it
 sv-read.py --session <id> --turns 2    # what it really said, from its own record
 sv-send.sh work:0.0 "Continue."        # delivers it, verifies it, then submits
 sv-watch.sh work:0.0 work:0.1 api:0.0  # one line per state change worth acting on
@@ -177,12 +179,15 @@ needs no flag.
 Each agent breaks in its own way, and the scripts know the difference. A Claude Code
 session's ID changes every time you run `/clear`, so `sv-resolve.py` tracks the
 `bridgeSessionId` that stays constant for the terminal instead — hand it any ID a session
-has ever had and it finds the live one. An opencode session keeps its ID, but is only
-readable through the server of the TUI that owns it, and a TUI serves one only when started
-with `--port` — so `sv-launch.sh` pins one and a hand-opened TUI falls back to reading the
-screen. One consequence worth knowing: `tmux send-keys` truncates, so instructions to
-Claude Code are capped at 120 characters and anything longer goes in a file, while opencode
-takes an instruction of any length — `sv-send.sh <pane> --file <path>` sends a whole one.
+has ever had and it finds the live one. An opencode session keeps its ID; it is read over
+the TUI's server when started with `--port`, or straight from opencode's own SQLite history
+when it was not, and a send is confirmed against whichever exists. Several sessions in one
+directory would otherwise look identical, so the first send to a pane records a
+**pane → session binding** and every later command resolves exactly instead of guessing;
+`sv-floor.py` shows the whole floor, bindings included, in one call. One consequence worth
+knowing: `tmux send-keys` truncates, so instructions to Claude Code are capped at 120
+characters and anything longer goes in a file, while opencode takes an instruction of any
+length — `sv-send.sh <pane> --file <path>` sends a whole one.
 
 ## Waking a supervisor on opencode
 
