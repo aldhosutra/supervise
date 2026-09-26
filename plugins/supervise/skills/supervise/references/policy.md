@@ -133,6 +133,24 @@ supervisor should render it. Headless Chromium over the DevTools protocol is eno
 "the environment cannot do this" deserves one check before it is believed. Once, that claim
 turned out to be a stale process of the supervisor's own holding the debugging port.
 
+The first thirty seconds are their own test. Load the page cold and do the first thing a
+new user would do, before anything else. A session verifies the *feature*, and every check
+it ran had already clicked something that happened to fix the state — so a control that
+only works after an unrelated keystroke is broken for every real user and passes every test
+that interacts first. That gap is where init-order bugs live.
+
+## A reset you cannot undo
+
+Clearing a session is safe only if the knowledge needed to continue lives somewhere other
+than the session's context. That is why the standing-instructions file is a precondition,
+not a nicety: write down what is done and what is next *before* resetting, and hand the
+freshly reset session nothing but a pointer to it.
+
+The restatement is the test. If a freshly reset session cannot say what it is doing and
+what comes next, the project's own documentation was insufficient — and you found that out
+at a moment you chose, rather than at the moment it mattered. Clear a session whose
+knowledge lived only in its context and you have lobotomised it.
+
 ## Tests that cannot fail
 
 A leak check with an exception list has stopped being a leak check. Two real examples: a
