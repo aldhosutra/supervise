@@ -39,7 +39,11 @@ def from_screen(text):
     # otherwise an idle pane misclassifies as UNKNOWN and the watcher goes
     # blind (a manually-started TUI with no --port has no server to ask).
     flat = " ".join(text.split())
-    if "Permission required" in flat or "Allow once" in flat:
+    # "enter confirm" is the dialog's own chrome. Without it, a session that
+    # merely *mentions* a permission dialog in its reply ("Allow once / Allow
+    # always / Reject") would be misread as blocked on one, and a watcher would
+    # hold its wakes forever.
+    if ("Permission required" in flat or "Allow once" in flat) and "enter confirm" in flat:
         return "PROMPT"
     if "esc interrupt" in flat or "esc to interrupt" in flat:
         return "BUSY"

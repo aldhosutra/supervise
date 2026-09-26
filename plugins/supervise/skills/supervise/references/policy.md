@@ -13,14 +13,45 @@ both, because it is a model of *watching someone work*, not of one program's ter
 What differs is how much of that the agent tells you, and the adapters differ accordingly.
 Claude Code offers a transcript file and a screen, so state has to be read off the screen.
 opencode runs an HTTP server that publishes its state, its message history and its pending
-permission queue, so nothing about it has to be inferred from pixels. The opencode adapter
-falls back to reading the screen only when that server cannot be reached, and says UNKNOWN
-rather than guessing when the fallback cannot classify it either.
+permission queue, so nothing about it has to be inferred from pixels — but only when the
+TUI was started with an explicit `--port`. A hand-opened TUI takes port `0` and listens on
+no TCP socket at all, so its state falls back to the screen like Claude Code's. The
+opencode adapter says UNKNOWN rather than guessing when neither the server nor the fallback
+can answer.
 
 Where an agent removes a constraint, the constraint goes — opencode has no 120-character
 send limit because nothing truncates. Where an agent removes a *protection*, it stays:
 opencode's API can answer a permission dialog, and the adapter still refuses to, because
 that rule was never about what was technically possible.
+
+## Who wakes the supervisor
+
+A supervisor that yields its turn is only useful if something starts the next one. The two
+agents differ here, and it is not a small difference. Claude Code has a monitor shell: you
+hand it a command and its completion re-invokes you. opencode has nothing of the kind — no
+scheduler, no subscription, no CLI that puts a message into a running TUI. So on opencode
+the wake is delivered the way a person would deliver it: by typing into the supervisor's
+own terminal.
+
+That makes tmux part of the mechanism rather than a viewing convenience. An opencode
+supervisor outside tmux has no pane to type into and, in 1.18.x, no server to post to
+either, so it cannot be woken at all. Hence the capability probe, and hence refusing to
+pretend: `sync` mode says out loud that the loop has to stay open.
+
+Two things make a delivered wake trustworthy rather than hopeful.
+
+**opencode queues a submitted prompt while it is busy.** Verified on 1.18.32 over both
+`tmux send-keys` and the HTTP API. A wake sent mid-turn is therefore not lost; it waits its
+turn. This is why the old guard that skipped a busy supervisor was a bug wearing the
+costume of a protection — four panes transitioned, one wake arrived. The one state worth
+refusing is a dialog, where the keystrokes land on the dialog and not the prompt; a
+supervisor mid-dialog is a human's decision anyway.
+
+**A keystroke is not a delivery.** The same lesson as `sv-send.sh`. The wake carries a
+token, and the watcher looks for that token in the supervisor's own history before calling
+it done. Unconfirmed means queued for retry, never reported as success. An edge-triggered
+event that is silently dropped is unrecoverable — that transition will not fire again — so
+this is exactly where guessing is not allowed.
 
 ## The pane lies twice
 

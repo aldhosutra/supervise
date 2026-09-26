@@ -85,7 +85,8 @@ flowchart LR
 
 The terminal is read for signals and never for content. A pane scrolls, so a long reply read
 that way arrives as its tail; the agent's own record has all of it — a `.jsonl` transcript
-for Claude Code, the HTTP server every opencode instance runs for opencode.
+for Claude Code, and for opencode the HTTP server it serves when started with a pinned port
+(which `sv-launch.sh` always sets). Wake-ups ride the pane itself, so they need no server.
 
 When a session hits something undecided, the supervisor does not pass it to you. It works
 down a ladder and stops at the first rung that settles the question:
@@ -154,9 +155,10 @@ session should still be around tomorrow.
 
 ## The toolkit
 
-Six scripts, useful on their own:
+Useful on their own:
 
 ```bash
+sv-capability.py                       # can this supervisor be woken, and how
 sv-launch.sh work ~/code/myproject     # start a session, print how to attach
 sv-resolve.py --list                   # every session ↔ its tmux pane
 sv-state.sh work:0.0                   # BUSY | IDLE | PROMPT | UNKNOWN | GONE
@@ -175,12 +177,25 @@ needs no flag.
 Each agent breaks in its own way, and the scripts know the difference. A Claude Code
 session's ID changes every time you run `/clear`, so `sv-resolve.py` tracks the
 `bridgeSessionId` that stays constant for the terminal instead — hand it any ID a session
-has ever had and it finds the live one. An opencode session keeps its ID but hides behind
-whichever random port its TUI is serving on, so the resolver finds the port and asks the
-server directly. One consequence worth knowing: `tmux send-keys` truncates, so instructions
-to Claude Code are capped at 120 characters and anything longer goes in a file, while
-opencode takes an instruction of any length — `sv-send.sh <pane> --file <path>` sends a
-whole one.
+has ever had and it finds the live one. An opencode session keeps its ID, but is only
+readable through the server of the TUI that owns it, and a TUI serves one only when started
+with `--port` — so `sv-launch.sh` pins one and a hand-opened TUI falls back to reading the
+screen. One consequence worth knowing: `tmux send-keys` truncates, so instructions to
+Claude Code are capped at 120 characters and anything longer goes in a file, while opencode
+takes an instruction of any length — `sv-send.sh <pane> --file <path>` sends a whole one.
+
+## Waking a supervisor on opencode
+
+Claude Code has a monitor shell: its completion re-invokes the supervisor. opencode has
+nothing like it, so `sv-watch.sh` wakes the supervisor itself, by typing a protocol line
+into its own tmux pane the moment a supervised session changes state. That is why an
+opencode supervisor runs inside tmux: the pane is the only channel that reaches it.
+
+It is not a keystroke and a hope. opencode queues a submitted prompt even mid-turn, so the
+wake lands whether the supervisor is busy or idle; but the wake is only treated as delivered
+once its token shows up in the supervisor's own message history, and retried otherwise.
+A dialog is the one state wakes are held for, and the watcher watches the supervisor's pane
+too, so it can say `SUPERVISOR-PROMPT` rather than silently stall.
 
 ## It will never
 

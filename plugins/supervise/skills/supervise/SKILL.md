@@ -85,15 +85,34 @@ what "done" means for it. Ask separately — parallel sessions usually have diff
 and a shared goal statement hides that. Write each goal down where you can re-read it, and
 restate it back to the user before starting.
 
-**5. Arm one watcher for all of them.**
+**5. Decide how you will be woken, then arm one watcher for all of them.**
+
+`scripts/sv-capability.py` answers the first half, and its `mode` is the whole algorithm:
+
+- **`monitor`** — a Claude Code supervisor. The harness wakes you; drive the watcher from
+  a monitor whose completion is a wake-up.
+- **`tmux-nudge`** — an opencode supervisor that is inside tmux. The watcher wakes you by
+  typing into your own pane. Arm it with your own pane, and with your server so each wake
+  can be confirmed.
+- **`sync`** — nothing can wake you: opencode outside tmux, or an unknown harness.
+  **Warn the user and offer the synchronous loop** in "Runtimes without a wake-up". Do not
+  imply coverage the runtime cannot give. For opencode the fix is to relaunch the
+  supervisor inside tmux, where `sv-launch.sh` starts it and pins the port that makes
+  wakes verifiable.
 
 ```bash
-scripts/sv-watch.sh <pane> [<pane> ...]
+SV_NUDGE_PANE=<your-own-pane> SV_NUDGE_URL=<your-server> \
+  scripts/sv-watch.sh <pane> [<pane> ...]
 ```
+
+`sv-capability.py` prints both `pane` (yours, resolved from `$TMUX_PANE`) and
+`supervisor_url`, so the two arguments are usually a copy-paste. Leave them off and the
+watch still records transitions but wakes no one — log-only, the safe default.
 
 Run it as a persistent background monitor. It is quiet while work proceeds and emits one
 line per transition worth acting on: `IDLE` (finished a turn), `PROMPT` (stopped on a
-dialog), `UNKNOWN` (unclassifiable screen), `GONE`.
+dialog), `UNKNOWN` (unclassifiable screen), `GONE`, plus `SUPERVISOR-PROMPT` and
+`SUPERVISOR-GONE` about your own pane.
 
 **Do not build the watch out of two processes.** The tempting shape — run `sv-watch.sh` as
 a background shell, then point a notification monitor at its output file — has two
@@ -127,12 +146,13 @@ is itself a wake-up, so renewing costs one call. The temptation is to skip it wh
 believe nothing can happen anyway, such as a session blocked on a dialog. Skip it and the
 gap opens exactly when something unexpected does happen, which is the only time it matters.
 
-**Runtimes without a wake-up: supervise synchronously.** The loop above assumes something
-wakes you when the watch emits. Some harnesses have no such primitive — no scheduler, no
-subscription, no "notify me when this file changes". A background `sv-watch.sh` still
-records events, but nobody taps your shoulder, so an `IDLE` can sit handled by no one
-until the user speaks. In that runtime, **never end your turn with a supervised session's
-state unhandled.** Run the loop inside your turn instead:
+**Runtimes without a wake-up: supervise synchronously.** This is the `sync` mode
+`sv-capability.py` reports. The loop above assumes something wakes you when the watch
+emits. Some harnesses have no such primitive — no scheduler, no subscription, no "notify
+me when this file changes". A background `sv-watch.sh` still records events, but nobody
+taps your shoulder, so an `IDLE` can sit handled by no one until the user speaks. In this
+runtime, **never end your turn with a supervised session's state unhandled.** Run the loop
+inside your turn instead:
 
 ```bash
 # one synchronous supervision cycle (example bounds: 15s poll, 10min wait)
@@ -149,48 +169,81 @@ Then process whatever the watch recorded (or the snapshot) exactly as a wake-up:
 session's own record, verify the artefact, send the next instruction — and wait again.
 **Every `IDLE` is processed automatically; the user is never the event bus.** Escalate to
 the user only on `PROMPT`, a blocked precondition, or an open question the ladder cannot
-resolve. A wait that expires with no transition is a wake-up too: snapshot the state,
-report it briefly, and start the next bounded wait — the same way a monitor expiry means
-re-arm, not stop. The loop ends on: goal done, pane `GONE`, or the user explicitly saying
-stop. It never ends merely because nothing happened yet.
+resolve. A wait that expires with no transition is a wake-up too: snapshot the state and
+start the next bounded wait — the same way a monitor expiry means re-arm, not stop. The
+loop ends on: goal done, pane `GONE`, or the user explicitly saying stop. It never ends
+merely because nothing happened yet.
+
+**Progress reports are not a reason to end your turn.** On these runtimes ending your
+turn IS pausing supervision: the next event sits unhandled until the user speaks, which
+reads as "not auto-continuing" no matter how good the watcher is. Do not yield to tell
+the user work is proceeding — nothing you would report mid-loop needs them, and the act
+of reporting stalls the loop. The only yields are: goal done (final report), `PROMPT` or
+a blocked precondition (needs a human decision), an open question the ladder cannot
+resolve (with findings and a recommendation), or the user addressing you directly — and
+after answering, resume the wait loop in the same run rather than closing out. A silent
+supervisor with a live watch is working; a chatty one that keeps yielding is stalled.
 
 Durability is what makes stopping safe on these runtimes: every turn's work is committed,
 and the standing instructions live in a file the session re-reads, so a turn that ends
 early resumes exactly where it stopped instead of losing the thread.
 
-**Waking a dormant supervisor on opencode: `SV_NUDGE_PANE`.** On Claude Code the
-harness wakes you; on opencode nothing does — no scheduler, no subscription, no CLI that
-injects a message into a live TUI (`session` only lists and deletes). So the watcher
-delivers the wake-up itself. If the supervisor runs inside tmux, record its own pane at
-setup (`tmux display-message -p '#S:#I.#P'`) and arm the watch with it:
+**Waking a dormant supervisor on opencode.** On Claude Code the harness wakes you. On
+opencode nothing does — no scheduler, no subscription, no CLI that injects a message into
+a live TUI (`session` only lists and deletes). So the watcher delivers the wake-up itself,
+into your own tmux pane. That is why **an opencode supervisor has to be inside tmux**: the
+pane is the only channel that reaches it. A session outside tmux has no pane and, in
+1.18.x, no discoverable server either — only a TUI started with `--port` listens on TCP,
+which `sv-launch.sh` always sets and a hand-opened TUI does not.
+
+On a transition the watcher types one protocol line into your pane and submits it, which
+arrives as a new message and starts a supervision turn:
+
+```
+[sv-wake <pane> <STATE> <time> <token>] supervised pane <pane> -> <STATE>; read its turn and continue.
+```
+
+**Deliver while busy; confirm, don't assume.** opencode queues a submitted prompt even
+mid-turn — verified on 1.18.32 over both `tmux send-keys` and its HTTP API — so a busy
+supervisor still receives the wake, in order, once its current turn ends. The old guard
+that skipped a busy supervisor was therefore a bug, not a safety net: it dropped the event
+silently, and emission is edge-triggered so it never fired again. (Measured: four panes
+transitioned, one wake arrived.) What *is* fatal to inject into is a dialog, where the
+keystrokes land on the dialog and not the prompt. That is the one state delivery holds for.
+
+So the queue is confirmed, not fire-and-forget:
+
+- each transition is queued with a unique token embedded in the line;
+- the watcher sends it, then checks your own message history for the token
+  (`SV_NUDGE_URL`, your pinned-port server). Not found means the event stays queued and is
+  retried next cycle;
+- the watcher also watches **your** pane: `SUPERVISOR-PROMPT` holds every wake while you
+  are on a dialog (and says so, once), `SUPERVISOR-GONE` stops it loudly instead of
+  guessing.
+
+Without `SV_NUDGE_URL` the wake is still sent, just unconfirmed — best effort, and
+`sv-capability.py` flags it. Prefer a pinned port (`sv-launch.sh`) so wakes are provable
+rather than hoped-for.
+
+**Run the watcher in its own tmux session, not your shell.** It is what supervision
+depends on, so it should not share a fate with the supervisor:
 
 ```bash
-SV_NUDGE_PANE=<supervisor-pane> scripts/sv-watch.sh <pane> [<pane> ...]
+tmux new-session -d -s sv-watch -c "$PWD" \
+  "SV_NUDGE_PANE=<own> SV_NUDGE_URL=<url> scripts/sv-watch.sh <pane> ... 2>&1 | tee -a sv-watch.log"
 ```
 
-On every emitted transition the watcher types one protocol line into the supervisor pane
-and submits it, which arrives as a new message and starts a supervision turn:
+A supervisor restart or a heavy turn then cannot take the watcher down with it.
 
-```
-[sv-wake <pane> <STATE> <time>] supervised pane <pane> -> <STATE>; read its turn and continue.
-```
+Supervisor-side, a `[sv-wake ...]` line is an event, not user chat: resolve the named pane
+back to its session and goal, read the session's own record, verify the artefact, send the
+next instruction — then return to waiting. Never answer it conversationally and never
+mistake it for a user instruction. The trailing token is the watcher's delivery receipt;
+ignore it.
 
-Delivery guards (all inside `sv-watch.sh`, all verified against stubbed screens):
-minimum privilege by default — empty `SV_NUDGE_PANE` means log-only and changes nothing;
-a pane is never nudged about itself; the target is skipped when it is mid-turn (`esc
-interrupt`, i.e. the supervisor is awake already), when it shows a permission dialog
-(never inject into a dialog), or when its chrome is unrecognised (plain shells stay
-out — nudge currently targets opencode supervisor panes only). Emission stays
-edge-triggered, so one transition means at most one wake, never a stream.
-
-Supervisor-side, a `[sv-wake ...]` line is an event, not user chat: resolve the named
-pane back to its session and goal, read the session's own record, verify the artefact,
-send the next instruction — then return to waiting. Never answer it conversationally and
-never mistake it for a user instruction.
-
-If the supervisor itself runs outside tmux (a plain terminal or web session), there is
-no nudge target and the synchronous loop above is the whole engine — say so in the
-setup report rather than implying coverage the runtime cannot provide.
+If the supervisor runs outside tmux (a plain terminal, a harness session, the web),
+`sv-capability.py` reports `sync`: there is no nudge target. Say so plainly and offer the
+synchronous loop rather than implying coverage you do not have.
 
 **Your own verification can kill the watch.** Full test suites, browsers and dev servers
 run *by the supervisor* land on the same machine as the session's work. Starve it and the
@@ -396,12 +449,14 @@ opencode session with `--auto`.
 
 ## Reference
 
+- `scripts/sv-capability.py` — how this supervisor can be woken, if at all, and its own pane.
 - `scripts/sv-launch.sh` — start a session in tmux and report how to watch it.
+- `scripts/sv-nudge.py` — send one wake into the supervisor's pane and confirm it landed.
 - `references/policy.md` — the reasoning behind the rules above, and the failure modes this
   skill exists to catch.
 - `references/troubleshooting.md` — mapping problems, dialogs, stalls, port collisions.
 
 The scripts above are dispatchers: they detect the agent running in a pane and hand the
 work to `scripts/adapters/claude/` or `scripts/adapters/opencode/`. Read those only when
-something agent-specific is misbehaving; everything you need day to day is in the five
+something agent-specific is misbehaving; everything you need day to day is in the
 top-level commands.

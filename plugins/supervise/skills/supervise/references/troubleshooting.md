@@ -14,10 +14,18 @@ restart it with `--resume`.
 
 ## An opencode pane resolves but `base_url` is null
 
-Every opencode TUI runs an HTTP server, and that is how this skill reads and drives it. The
-port is random unless the process was started with `--port`, and the fallback is to find it
-with `lsof`. If both fail there is nothing to talk to: restart the session with
-`sv-launch.sh`, which always pins a port.
+Only an opencode TUI started with an explicit `--port` listens on TCP. A TUI opened by hand
+takes the default port `0`, and in 1.18.x that means no TCP listener at all — `lsof` finds
+nothing to talk to. This is not fatal to every operation:
+
+- **State** still works: `sv-state.sh` falls back to reading the pane's chrome.
+- **Sending** still works if it goes through the pane: that is exactly the channel
+  `sv-watch.sh` uses to wake an opencode supervisor, and it needs no server.
+- **Reading history and confirming a wake do not.** `sv-read.py` and `sv-send.sh` need the
+  server, and `sv-nudge.py` can only confirm a wake when given `SV_NUDGE_URL`.
+
+So restart a session you must read with `sv-launch.sh`, which always pins a port. For a
+supervisor, a pinned port is also what makes every wake provable rather than hoped-for.
 
 The same symptom appears when opencode is running somewhere the `lsof` call cannot see the
 process — inside a container, say, or under a different user.
@@ -71,6 +79,24 @@ tailing its output is two processes with one failure mode each — and if the wr
 the reader tails a dead file forever without a word. Collapse it into one loop that polls
 `sv-state.sh` and emits directly (SKILL.md, step 5), and make it exit loudly on `GONE` so
 silence can only mean "still busy".
+
+## The supervisor never wakes up
+
+Run `sv-capability.py` first. If it reports `mode: sync`, nothing can wake you and the
+watcher is log-only: move the supervisor inside tmux (opencode), or use the synchronous
+loop. If it reports `tmux-nudge` and wakes still do not arrive, check in this order:
+
+- **Is the supervisor on a dialog?** The watcher prints `SUPERVISOR-PROMPT` and holds every
+  wake until it is answered. That is deliberate — keystrokes would go to the dialog — but it
+  means nothing moves until the user answers. Answer it, or add an allowlist.
+- **Was the wake unconfirmed?** A line was typed but its token never appeared in the
+  supervisor's history. Without `SV_NUDGE_URL` this cannot be detected at all; give the
+  supervisor a pinned port so delivery is provable.
+- **Did the watcher die?** `tmux ls | grep sv-watch`. Run it in its own tmux session so a
+  supervisor restart cannot take it down with it.
+
+A wake is delivered even while the supervisor is mid-turn — opencode queues a submitted
+prompt — so "it was busy" is not the explanation for a missing wake.
 
 ## Everything is slow and nobody can say why
 
