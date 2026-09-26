@@ -227,6 +227,8 @@ def main():
                               if s["session_id"] == b["session_id"]), None)
                 if match:
                     bridge = match["bridge"]
+                    pane_here["how"] = "binding"
+                    pane_by_bridge[bridge] = pane_here
         if not match:
             sys.exit(f"pane {args.pane} has not written a transcript yet")
     elif args.session:
