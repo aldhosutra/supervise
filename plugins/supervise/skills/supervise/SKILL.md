@@ -15,6 +15,25 @@ pool — it is a foreman on a floor the user can walk onto at any time.
 either way and works out which agent a pane runs on its own. Where the two genuinely
 differ — how much text can be sent at once, above all — the difference is called out.
 
+## Start here — the one rule that keeps the run alive
+
+**Arm the wake channel before you wait, then END YOUR TURN.** In the two async modes —
+Claude Code's `monitor` and opencode's `tmux-nudge` — the next turn is started by a wake,
+never by you polling. A hand-written `sleep` / `for` / `while` loop over `sv-state.sh` or
+`sv-read.py` inside your own turn holds the turn open, so the `[sv-wake ...]` lines queue
+behind you and the run stalls while looking busy.
+
+- **Claude Code (`monitor`):** the harness wakes you. **Nothing to arm.**
+- **opencode (`tmux-nudge`):** arm in one command, then end your turn —
+  `scripts/sv-arm.sh <pane> [<pane>...]`
+- **`sync`:** nothing can wake you. Restore the channel (relaunch inside tmux), or
+  acknowledge the degraded path with `SV_SYNC_OK=1` — never a silent poll loop.
+
+This is enforced, not just advised: `sv-state.sh` and `sv-read.py` **refuse to run** from an
+opencode supervisor when no watcher is armed (exit 9, with the remedy on stderr). The
+one-call discovery step (`sv-floor.py`) and the watcher itself are exempt. If you see that
+refusal you were about to poll — arm the watcher and end your turn.
+
 ## Invocation
 
 `/supervise <session-id> [<session-id> ...]`
@@ -99,6 +118,21 @@ starting.
   poll loop. For opencode the fix is to relaunch the supervisor inside tmux, where
   `sv-launch.sh` pins the port that makes wakes verifiable.
 
+**Arm it with one command.** `scripts/sv-arm.sh <pane> [<pane>...]` reads the mode and does
+the right thing: a no-op under `monitor`, start-and-register the watcher under `tmux-nudge`,
+and a "restore the channel" message under `sync`. It is idempotent — re-run it to re-arm
+after a monitor expires. Prefer it to typing the `sv-watch.sh` invocation by hand:
+
+```bash
+scripts/sv-arm.sh <pane> [<pane> ...]
+# then END YOUR TURN — the watcher starts the next one
+```
+
+Run `scripts/sv-capability.py` once at the start and say the mode out loud; its output now
+carries `watchers_live` and the `arm_command`, so a human watching tmux can see at a glance
+whether the run is actually armed. Starting the watcher yourself (below) still works — this
+is just the path that does not depend on remembering to.
+
 **Take the mode literally; never promote a degraded `monitor`/`tmux-nudge` into `sync`.** The
 only `sync` mode is the one the probe prints as `sync`. A null `supervisor_url`, an
 "unconfirmed" note, or a hand-opened TUI all still leave you in `tmux-nudge`: wakes still
@@ -109,6 +143,8 @@ for `sync` mode, and in an async mode it is actively harmful: it holds the turn 
 `[sv-wake ...]` lines the watcher sends queue behind you instead of driving you, and the run
 stalls while looking busy. "Unconfirmed wake" means best-effort delivery, never "poll
 instead."
+
+If you would rather start it yourself (this is exactly what `sv-arm.sh` does):
 
 ```bash
 SV_NUDGE_PANE=<your-own-pane> SV_NUDGE_URL=<your-server> \
@@ -414,7 +450,8 @@ opencode session with `--auto`.
 The whole surface; you do not need to read the scripts to use them.
 
 ```text
-sv-capability.py                         monitor | tmux-nudge | sync, and your own pane
+sv-capability.py                         monitor | tmux-nudge | sync, your pane, watchers
+sv-arm.sh <pane> ...                     arm the wake channel in one command, then end turn
 sv-floor.py                              every agent pane: harness, state, session (one call)
 sv-resolve.py --pane <pane>              resolve one pane to its session/transcript
 sv-resolve.py --list                     every session and the pane it maps to

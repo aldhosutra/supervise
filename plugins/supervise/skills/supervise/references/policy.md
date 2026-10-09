@@ -55,6 +55,31 @@ it done. Unconfirmed means queued for retry, never reported as success. An edge-
 event that is silently dropped is unrecoverable — that transition will not fire again — so
 this is exactly where guessing is not allowed.
 
+## The poll rule is enforced, not advised
+
+The rule "arm the watcher, then end your turn" was stated in `SKILL.md` many times over and
+a supervisor still broke it — it ran `sleep` and `sv-state.sh` in a loop inside its own turn,
+which is precisely the shape that queues wakes behind a busy turn. Repeating prose harder
+does not fix that; the *tool has to refuse*.
+
+So `sv-state.sh` and `sv-read.py` now consult a guard. When the caller is an opencode
+supervisor in `tmux-nudge` (or `sync`) mode and no watcher is registered, they exit `9` with
+the remedy instead of answering. Six exemptions keep this from becoming a blunt ban:
+
+- `monitor` (Claude Code) — the harness wakes you; there is nothing to arm, so never gated.
+- an `unknown` harness — a human or another tool; not this skill's loop to police.
+- the watcher itself (`SV_WATCHER=1`) — it *is* the sanctioned poll.
+- sanctioned tools (`SV_GUARD=off`) — `sv-floor.py` discovery and the self-test.
+- `SV_SYNC_OK=1` — an explicit, spoken acknowledgement of the degraded synchronous path.
+- a registered, live watcher — the exit hatch: once armed, ordinary reads are fine.
+
+`sv-watch.sh` registers itself at startup and clears the entry on exit, so the guard tracks
+liveness rather than trusting a timestamp. `scripts/sv-arm.sh` is the one-command front door:
+on `monitor` it is a no-op, on `tmux-nudge` it starts and registers the watcher, and on
+`sync` it refuses to pretend and points at how to restore the channel. The design principle
+is the same one as everywhere else in this skill — make the wrong thing fail loudly and the
+right thing one command.
+
 ## The pane lies twice
 
 This is the Claude Code adapter's problem specifically, and it is why the opencode adapter

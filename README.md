@@ -159,6 +159,7 @@ Useful on their own:
 
 ```bash
 sv-capability.py                       # can this supervisor be woken, and how
+sv-arm.sh work:0.0 work:0.1            # arm the wake channel in one command, then end turn
 sv-floor.py                            # every agent pane: harness, state, session
 sv-launch.sh work ~/code/myproject     # start a session, print how to attach
 sv-resolve.py --list                   # every session ↔ its tmux pane
@@ -189,12 +190,24 @@ knowing: `tmux send-keys` truncates, so instructions to Claude Code are capped a
 characters and anything longer goes in a file, while opencode takes an instruction of any
 length — `sv-send.sh <pane> --file <path>` sends a whole one.
 
+One rule is enforced rather than merely written down. `sv-state.sh` and `sv-read.py` refuse
+to run from an opencode supervisor with no watcher armed and no synchronous acknowledgement,
+because calling them in a hand-written loop is the busy-poll anti-pattern that stalls a run.
+`sv-floor.py` (discovery) and `sv-watch.sh` (the watcher) are exempt; `SV_SYNC_OK=1`
+acknowledges the degraded path deliberately. If you see a `REFUSED` message, you were about
+to poll — run `sv-arm.sh` and end your turn.
+
 ## Waking a supervisor on opencode
 
 Claude Code has a monitor shell: its completion re-invokes the supervisor. opencode has
 nothing like it, so `sv-watch.sh` wakes the supervisor itself, by typing a protocol line
 into its own tmux pane the moment a supervised session changes state. That is why an
 opencode supervisor runs inside tmux: the pane is the only channel that reaches it.
+
+`sv-arm.sh work:0.0 work:0.1` is the one command that starts this correctly: it reads the
+wake mode and either arms the watcher (opencode), says there is nothing to arm (Claude
+Code), or tells you how to restore the channel (`sync`). Arm it, then **end your turn** —
+the watcher starts the next one, so there is never a reason to sit in a poll loop.
 
 It is not a keystroke and a hope. opencode queues a submitted prompt even mid-turn, so the
 wake lands whether the supervisor is busy or idle; but the wake is only treated as delivered

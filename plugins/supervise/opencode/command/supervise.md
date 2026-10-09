@@ -9,5 +9,5 @@ Sessions or panes to supervise (may be empty):
 
 $ARGUMENTS
 
-If nothing was given, run the skill's `scripts/sv-resolve.py --list`, show the sessions
-that map to a tmux pane, and ask which of them to supervise.
+If nothing was given, run the skill's one-call discovery, `scripts/sv-floor.py`, show the
+agent panes it lists, and ask which of them to supervise.

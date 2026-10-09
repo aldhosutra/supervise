@@ -144,8 +144,8 @@ Other supervisor-side long-runners, and how each stops:
 - **Dev servers and browsers you started** stop **by process, not port** (see "Everything is
   slow and nobody can say why"), as soon as the check that needed them finishes.
 
-After stopping the watcher you are in `sync` mode: nothing wakes you. Re-arm it (SKILL.md,
-step 5) before the next event you need to see can occur.
+After stopping the watcher you are in `sync` mode: nothing wakes you. Re-arm it with
+`sv-arm.sh <pane> ...` (SKILL.md, step 5) before the next event you need to see can occur.
 
 ## The supervisor never wakes up
 
@@ -165,6 +165,24 @@ reports `tmux-nudge` and wakes still do not arrive, check in this order:
 
 A wake is delivered even while the supervisor is mid-turn — opencode queues a submitted
 prompt — so "it was busy" is not the explanation for a missing wake.
+
+## A command prints `REFUSED` and exits 9
+
+That is the policy guard, and it is working. `sv-state.sh` and `sv-read.py` refuse to run
+from an opencode supervisor when no watcher is armed and no synchronous acknowledgement is
+set, because calling them in a loop is the busy-poll anti-pattern that stalls the run. The
+message names the fix. The short version:
+
+- **Arm the watcher, then end your turn:** `sv-arm.sh <pane> ...`. Once a watcher is
+  registered and alive, ordinary reads are allowed again.
+- **Deliberately running the degraded path?** Say so to the user and set `SV_SYNC_OK=1`.
+- **Claude Code is never gated.** `monitor` mode has nothing to arm; the harness wakes you.
+
+The exemptions, for when a refusal surprises you: `monitor` (Claude Code) and an `unknown`
+harness (a human or another tool) always pass; the watcher itself sets `SV_WATCHER=1`;
+`sv-floor.py` discovery and the self-test set `SV_GUARD=off`. If you need to bypass the guard
+on purpose, use one of those explicitly rather than fighting it — and `SV_GUARD=off` in a
+supervisor turn almost always means you are about to reintroduce the poll loop.
 
 ## Everything is slow and nobody can say why
 
