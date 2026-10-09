@@ -236,6 +236,27 @@ watcher first. Stop every server you start by **process, not port**
 (`lsof -ti:PORT | xargs kill` only frees the port; the owner respawns the child), and sweep
 for strays at the end of a long run. Detail in `references/troubleshooting.md`.
 
+**Teardown: when to stop the machinery, and what not to.** Only the supervisor's own
+long-runners are yours to stop, and only at seams — stopping them is *not* stopping the
+work:
+
+- **`sv-watch.sh` — stop it only when no wake can still matter:** every supervised goal is
+  met or handed off, every supervised pane is `GONE`, or the user says stop. Never between
+  sub-tasks and never while any session is still working — a stopped watcher is a blind
+  supervisor, and blind looks exactly like "still working". Start it in its own tmux
+  session (above) so teardown is one handle: `tmux kill-session -t sv-watch`. A detached
+  `... | tee` pipeline is several processes and killing only the parent orphans the rest;
+  kill the group, then confirm none remain with `ps -Ao pid,args= | grep '[s]v-watch'`.
+- **Sessions started by `sv-launch.sh` — never mid-flight.** `tmux kill-session -t <name>`
+  only once their work is committed and the user knows, or when the user agrees to a
+  restart. Killing a session with uncommitted work destroys it; stopping the watcher does
+  not.
+- **Servers and browsers you started — by process, not port**, as soon as a check finishes.
+
+Stopping the watcher leaves the supervised sessions running and watchable; it only reclaims
+the wake channel. Once it is gone, you are `sync`-blind, so re-arm before you need waking
+again. Detail in `references/troubleshooting.md`.
+
 ## The supervision loop
 
 On every wake, for the session that changed:
@@ -423,7 +444,8 @@ sv-selftest.py                           smoke test for all of the above
 - `scripts/sv-nudge.py` — send one wake into the supervisor's pane and confirm it landed.
 - `references/policy.md` — the reasoning behind the rules above, and the failure modes this
   skill exists to catch.
-- `references/troubleshooting.md` — mapping problems, dialogs, stalls, port collisions.
+- `references/troubleshooting.md` — mapping problems, dialogs, stalls, port collisions,
+  stopping the watcher and other supervisor processes.
 
 The scripts are dispatchers: they detect the agent in a pane and hand the work to
 `scripts/adapters/claude/` or `scripts/adapters/opencode/`. Read those only when something

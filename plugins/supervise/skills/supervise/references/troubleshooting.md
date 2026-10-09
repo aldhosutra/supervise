@@ -93,6 +93,59 @@ the reader tails a dead file forever without a word. Collapse it into one loop t
 `sv-state.sh` and emits directly (SKILL.md, step 5), and make it exit loudly on `GONE` so
 silence can only mean "still busy".
 
+## Stopping the watcher and other supervisor processes
+
+The watcher is meant to run for the life of the supervision, and to be stopped only when it
+has nothing left to watch:
+
+- **every supervised goal is met or handed off** — the run is over;
+- **every supervised pane is `GONE`** — nothing left to watch;
+- **the user says stop.**
+
+Not between tasks, and not while any session is still working. A stopped watcher is a blind
+supervisor, and blind looks exactly like "still working" — the failure this whole section is
+written against. Stopping the watcher is not stopping the work: the supervised sessions keep
+running and the user can still attach and watch them. It only reclaims the wake channel.
+
+**Prefer a handle that stops the whole thing.** Start the watcher in its own tmux session
+(SKILL.md, step 5) so teardown is one command:
+
+```bash
+tmux kill-session -t sv-watch
+```
+
+**If it was started as a detached shell with a pipe, the pipeline is several processes** and
+killing only the parent orphans the rest:
+
+```text
+zsh -c 'sv-watch.sh <pane> ... | tee -a sv-watch.log'   # 3 processes: zsh, sv-watch.sh, tee
+```
+
+`pkill -f sv-watch.sh` takes out the script, and `tee` then exits on `SIGPIPE`, but the
+background `zsh` can linger. Kill by PID after finding them, and kill them together:
+
+```bash
+ps -Ao pid,ppid,args= | grep '[s]v-watch'   # the parent zsh, sv-watch.sh, and tee
+kill <pid> <pid> <pid>
+ps -Ao pid,args= | grep '[s]v-watch'        # confirm none remain
+```
+
+Killing by process, not by port or by name alone, is deliberate: `pkill -f` can also catch a
+session that merely mentions the script in its own command line, so check the list before
+you fire.
+
+Other supervisor-side long-runners, and how each stops:
+
+- **Sessions started by `sv-launch.sh`** stop with `tmux kill-session -t <name>`, and only
+  once their work is committed and the user knows — never mid-turn or with uncommitted work,
+  which is exactly what a stop destroys. If a session is wedged, say so and let the user
+  decide to restart it.
+- **Dev servers and browsers you started** stop **by process, not port** (see "Everything is
+  slow and nobody can say why"), as soon as the check that needed them finishes.
+
+After stopping the watcher you are in `sync` mode: nothing wakes you. Re-arm it (SKILL.md,
+step 5) before the next event you need to see can occur.
+
 ## The supervisor never wakes up
 
 Run `sv-capability.py` first. If it reports `mode: sync`, nothing can wake you and the
