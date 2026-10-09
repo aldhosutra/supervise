@@ -146,6 +146,7 @@ lines_before=$(wc -l < watch.log)
 for i in $(seq 1 40); do
   sleep 15
   [ "$(wc -l < watch.log)" -gt "$lines_before" ] && break          # transition recorded
+  [ "$(scripts/sv-state.sh <pane>)" = PROMPT ] && break            # dialog needs a human
   kill -0 <watch-pid> 2>/dev/null || { echo "WATCH DIED"; break; }  # liveness guard
 done
 scripts/sv-state.sh <pane>   # snapshot even on expiry
@@ -209,6 +210,17 @@ heavy turn cannot take it down:
 tmux new-session -d -s sv-watch -c "$PWD" \
   "SV_NUDGE_PANE=<own> SV_NUDGE_URL=<url> scripts/sv-watch.sh <pane> ... 2>&1 | tee -a sv-watch.log"
 ```
+
+**On `monitor` and `tmux-nudge`, the wake is the loop — never busy-poll.** Once the watcher
+is armed, you wait by ending your turn; each `[sv-wake ...]` it delivers starts the next one.
+A hand-written `while` loop calling `sv-state.sh` inside your own turn is the wrong tool: it
+blocks the whole shell, cannot be interrupted without killing the run, and busy-waits for an
+event the watcher already pushes to you. "Progress reports are not a reason to end your turn"
+(below) does **not** mean "stay in a spin loop" — it means do not yield *while a wake is
+unhandled*. And a `null` `supervisor_url` makes wakes *unconfirmed*, not absent: they still
+land through your pane via `send-keys`, so the fix for an unattended run is a pinned port
+(`sv-launch.sh`), never a poll loop. Reserve the synchronous loop below for `sync` mode,
+where nothing can wake you at all.
 
 Supervisor-side, a `[sv-wake ...]` line is an event, not user chat: resolve the named pane
 back to its session and goal, read the session's own record, verify the artefact, send the
