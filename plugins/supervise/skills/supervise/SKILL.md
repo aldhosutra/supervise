@@ -95,9 +95,20 @@ starting.
   are sent **unconfirmed**; for an unattended run, relaunch the supervisor with
   `sv-launch.sh <name> <dir> --agent opencode`, which pins the port that makes them provable.
 - **`sync`** — nothing can wake you: opencode outside tmux, or an unknown harness.
-  **Warn the user and offer the synchronous loop** below. For opencode the fix is to
-  relaunch the supervisor inside tmux, where `sv-launch.sh` pins the port that makes wakes
-  verifiable.
+  **Tell the user plainly and restore the wake channel** below — do not fall back to a
+  poll loop. For opencode the fix is to relaunch the supervisor inside tmux, where
+  `sv-launch.sh` pins the port that makes wakes verifiable.
+
+**Take the mode literally; never promote a degraded `monitor`/`tmux-nudge` into `sync`.** The
+only `sync` mode is the one the probe prints as `sync`. A null `supervisor_url`, an
+"unconfirmed" note, or a hand-opened TUI all still leave you in `tmux-nudge`: wakes still
+arrive through your pane via `send-keys`, just without a delivery receipt. Your move is the
+same in *every* async mode — **arm the watcher, then END YOUR TURN and let the wake start the
+next one.** Running `sv-state.sh` or `sv-read.py` in a loop inside your own turn is reserved
+for `sync` mode, and in an async mode it is actively harmful: it holds the turn open, so the
+`[sv-wake ...]` lines the watcher sends queue behind you instead of driving you, and the run
+stalls while looking busy. "Unconfirmed wake" means best-effort delivery, never "poll
+instead."
 
 ```bash
 SV_NUDGE_PANE=<your-own-pane> SV_NUDGE_URL=<your-server> \
@@ -115,49 +126,31 @@ line per transition worth acting on: `IDLE`, `PROMPT`, `UNKNOWN`, `GONE`, plus
 **Do not build the watch out of two processes.** A background `sv-watch.sh` plus a
 separate monitor tailing its output is two things that can die, and when the *writer* dies
 the *reader* tails a dead file forever. You are then blind, and blind looks exactly like
-"still working". Prefer **one** process that both polls and emits; if your monitor tool can
-run a command, give it the loop directly:
-
-```bash
-prev=""
-while true; do
-  s=$(scripts/sv-state.sh <pane> 2>/dev/null); [ -z "$s" ] && s="GONE"
-  if [ "$s" != "$prev" ]; then
-    case "$s" in IDLE|PROMPT|UNKNOWN|GONE) echo "$(date +%H:%M:%S) <pane> -> $s" ;; esac
-    prev="$s"
-  fi
-  [ "$s" = "GONE" ] && break
-  sleep 5
-done
-```
+"still working". `sv-watch.sh` is already the **one** process that both polls and emits —
+run it directly (in its own tmux session, below) and hand *its* command to your harness's
+monitor if it has one. Never re-implement its loop by hand in your own turn: a hand-written
+`while true; do sv-state.sh …` is the busy-poll anti-pattern, and it is deliberately absent
+from this skill.
 
 **Re-arm on every expiry, without deciding whether it is worth it.** Monitors are usually
 capped (30 minutes is common). The temptation is to skip renewal when nothing can happen
 anyway, such as a session blocked on a dialog; skip it and the gap opens exactly when
 something unexpected does.
 
-**Runtimes without a wake-up: supervise synchronously.** This is `sync` mode. A background
-`sv-watch.sh` still records events, but nobody taps your shoulder. Here, **never end your
-turn with a supervised session's state unhandled.** Run the loop inside your turn:
+**Runtimes without a wake-up: `sync` mode is a degraded fallback, not a polling style.**
+This is the one mode where nothing taps your shoulder. The fix is to *restore the wake
+channel*, not to write a poll loop: relaunch the supervisor inside tmux
+(`sv-launch.sh`, which pins the port), or hand the watcher's output to your harness's own
+monitor so its completion re-invokes you. **Do not hand-write a `while`/`for` loop over
+`sv-state.sh`, `sv-read.py` or `watch.log` inside your turn** — that is the exact
+anti-pattern that queues `[sv-wake ...]` lines behind a busy turn and stalls the run while
+looking busy, and it appears nowhere in this skill for a reason. If a poll loop is genuinely
+the only option left, say so to the user and get agreement before running one.
 
-```bash
-# one synchronous supervision cycle (example bounds: 15s poll, 10min wait)
-lines_before=$(wc -l < watch.log)
-for i in $(seq 1 40); do
-  sleep 15
-  [ "$(wc -l < watch.log)" -gt "$lines_before" ] && break          # transition recorded
-  [ "$(scripts/sv-state.sh <pane>)" = PROMPT ] && break            # dialog needs a human
-  kill -0 <watch-pid> 2>/dev/null || { echo "WATCH DIED"; break; }  # liveness guard
-done
-scripts/sv-state.sh <pane>   # snapshot even on expiry
-```
-
-Then process what the watch recorded, or the snapshot, exactly as a wake-up. **Every
-`IDLE` is processed automatically; the user is never the event bus.** Escalate only on
-`PROMPT`, a blocked precondition, or an open question the ladder cannot resolve. A wait
-that expires with no transition is a wake-up too: snapshot and start the next bounded
-wait. The loop ends on goal done, pane `GONE`, or the user saying stop — never merely
-because nothing happened yet.
+When a wake does arrive, process what it reported exactly as a wake-up. **Every `IDLE` is
+processed automatically; the user is never the event bus.** Escalate only on `PROMPT`, a
+blocked precondition, or an open question the ladder cannot resolve. The run ends on goal
+done, pane `GONE`, or the user saying stop — never merely because nothing happened yet.
 
 **Progress reports are not a reason to end your turn.** Ending your turn IS pausing
 supervision: the next event sits unhandled until the user speaks. Do not yield to say work
@@ -219,16 +212,17 @@ event the watcher already pushes to you. "Progress reports are not a reason to e
 (below) does **not** mean "stay in a spin loop" — it means do not yield *while a wake is
 unhandled*. And a `null` `supervisor_url` makes wakes *unconfirmed*, not absent: they still
 land through your pane via `send-keys`, so the fix for an unattended run is a pinned port
-(`sv-launch.sh`), never a poll loop. Reserve the synchronous loop below for `sync` mode,
-where nothing can wake you at all.
+(`sv-launch.sh`), never a poll loop. In `sync` mode, where nothing can wake you at all, the
+fix is likewise to restore the wake channel — not to hand-write a poll loop.
 
 Supervisor-side, a `[sv-wake ...]` line is an event, not user chat: resolve the named pane
 back to its session and goal, read the session's own record, verify the artefact, send the
 next instruction — then return to waiting. Never answer it conversationally and never
 mistake it for a user instruction; the trailing token is the watcher's delivery receipt.
 
-If the supervisor runs outside tmux, `sv-capability.py` reports `sync`: say so plainly and
-offer the synchronous loop rather than implying coverage you do not have.
+If the supervisor runs outside tmux, `sv-capability.py` reports `sync`: say so plainly —
+restore the wake channel (relaunch inside tmux) rather than implying coverage you do not have,
+and do not substitute a hand-written poll loop.
 
 **Housekeeping.** Run heavy checks (test suites, browsers, dev servers) while the session
 is idle, never alongside its builds — a starved machine reaps background shells, the

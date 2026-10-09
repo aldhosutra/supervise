@@ -89,9 +89,10 @@ say what was stopped, and let the user decide when there is headroom.
 
 **Your watch had two moving parts.** A background `sv-watch.sh` plus a separate monitor
 tailing its output is two processes with one failure mode each — and if the writer dies,
-the reader tails a dead file forever without a word. Collapse it into one loop that polls
-`sv-state.sh` and emits directly (SKILL.md, step 5), and make it exit loudly on `GONE` so
-silence can only mean "still busy".
+the reader tails a dead file forever without a word. `sv-watch.sh` is already the single
+process that polls `sv-state.sh` and emits directly; run it by itself, and make it exit
+loudly on `GONE` so silence can only mean "still busy". Never re-implement its loop inside
+your own turn (SKILL.md, step 5).
 
 ## Stopping the watcher and other supervisor processes
 
@@ -149,8 +150,9 @@ step 5) before the next event you need to see can occur.
 ## The supervisor never wakes up
 
 Run `sv-capability.py` first. If it reports `mode: sync`, nothing can wake you and the
-watcher is log-only: move the supervisor inside tmux (opencode), or use the synchronous
-loop. If it reports `tmux-nudge` and wakes still do not arrive, check in this order:
+watcher is log-only: move the supervisor inside tmux (opencode) to restore the wake channel.
+Do not substitute a hand-written poll loop — it holds the turn open and stalls the run. If it
+reports `tmux-nudge` and wakes still do not arrive, check in this order:
 
 - **Is the supervisor on a dialog?** The watcher prints `SUPERVISOR-PROMPT` and holds every
   wake until it is answered. That is deliberate — keystrokes would go to the dialog — but it

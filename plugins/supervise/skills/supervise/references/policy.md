@@ -36,7 +36,9 @@ own terminal.
 That makes tmux part of the mechanism rather than a viewing convenience. An opencode
 supervisor outside tmux has no pane to type into and, in 1.18.x, no server to post to
 either, so it cannot be woken at all. Hence the capability probe, and hence refusing to
-pretend: `sync` mode says out loud that the loop has to stay open.
+pretend: `sync` mode says out loud that nothing will wake you, and the fix is to restore the
+wake channel (run the supervisor inside tmux), never to fall back to a poll loop that holds
+the turn open and queues every wake behind it.
 
 Two things make a delivered wake trustworthy rather than hopeful.
 
