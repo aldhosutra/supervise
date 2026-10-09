@@ -26,6 +26,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "lib"))
 
 import sv_detect  # noqa: E402
+import sv_guard  # noqa: E402
 
 
 def run(cmd):
@@ -103,6 +104,13 @@ def main():
         notes.append("own opencode pane has no reachable server (no --port); "
                      "wakes are sent without delivery confirmation")
 
+    try:
+        watchers = len(sv_guard.watchers_live())
+    except Exception:
+        watchers = 0
+
+    arm = os.path.join(HERE, "sv-arm.sh")
+
     if monitor:
         mode = "monitor"
         async_ok = True
@@ -121,6 +129,13 @@ def main():
             notes.append("unknown harness and not in tmux: no wake-up channel. Use the "
                          "synchronous loop, or run the supervisor inside tmux.")
 
+    if mode == "tmux-nudge" and watchers == 0:
+        notes.append("no watcher armed for this supervisor yet; run '%s <pane>...' "
+                     "before ending your turn" % arm)
+    if mode == "sync":
+        notes.append("nothing can wake you; do not poll — restore the channel "
+                     "(relaunch in tmux) or acknowledge with SV_SYNC_OK=1")
+
     result = {
         "harness": agent,
         "monitor": monitor,
@@ -129,6 +144,8 @@ def main():
         "supervisor_url": url,
         "async_capable": async_ok,
         "mode": mode,
+        "watchers_live": watchers,
+        "arm_command": arm if mode != "monitor" else None,
         "notes": notes,
     }
 

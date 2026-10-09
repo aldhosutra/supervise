@@ -43,7 +43,20 @@ def main():
 
     root = tempfile.mkdtemp(prefix="sv-selftest-")
     os.environ["SV_STATE_DIR"] = os.path.join(root, "state")
+    # The primitive-path tests below are not a supervisor poll loop.
+    os.environ["SV_GUARD"] = "off"
     sessions = []
+
+    guard = os.path.join(HERE, "lib", "sv_guard.py")
+    sstate = os.path.join(HERE, "sv-state.sh")
+    sdir = os.environ["SV_STATE_DIR"]
+
+    def run_env(cmd, extra):
+        env = dict(os.environ)
+        env.pop("SV_GUARD", None)
+        env["SV_STATE_DIR"] = sdir
+        env.update(extra)
+        return subprocess.run(cmd, capture_output=True, text=True, env=env)
 
     def tmux_new(name, command, cwd):
         subprocess.run(["tmux", "kill-session", "-t", name], capture_output=True)
@@ -71,6 +84,38 @@ def main():
         out = run([sys.executable, os.path.join(HERE, "sv-capability.py"), "--field", "mode"])
         check("capability reports a mode", out.stdout.strip() in ("monitor", "tmux-nudge", "sync"),
               out.stdout.strip())
+
+        # Policy guard: the correct pattern is allowed, the anti-pattern is refused.
+        def gcheck(mode, env_extra=None, rc_want=0):
+            extra = {"SV_GUARD_FORCE_MODE": mode}
+            extra.update(env_extra or {})
+            return run_env([sys.executable, guard, "check", "--primitive", "test"], extra)
+
+        o = gcheck("monitor")
+        check("guard allows monitor (claude harness)", o.returncode == 0, f"exit={o.returncode}")
+        o = gcheck("unknown")
+        check("guard allows a human/unknown caller", o.returncode == 0, f"exit={o.returncode}")
+        o = gcheck("tmux-nudge")
+        check("guard refuses unarmed tmux-nudge",
+              o.returncode == 9 and "REFUSED" in o.stderr, f"exit={o.returncode}")
+        o = gcheck("sync")
+        check("guard refuses sync without acknowledgement", o.returncode == 9, f"exit={o.returncode}")
+        o = gcheck("sync", {"SV_SYNC_OK": "1"})
+        check("guard allows sync with SV_SYNC_OK=1", o.returncode == 0, f"exit={o.returncode}")
+        o = gcheck("tmux-nudge", {"SV_WATCHER": "1"})
+        check("guard allows the watcher itself", o.returncode == 0, f"exit={o.returncode}")
+        run_env([sys.executable, guard, "register", "--pid", str(os.getpid()),
+                 "--panes", "x", "--session", "t"], {})
+        o = gcheck("tmux-nudge")
+        check("guard allows once a watcher is registered", o.returncode == 0, f"exit={o.returncode}")
+        run_env([sys.executable, guard, "unregister", "--pid", str(os.getpid())], {})
+
+        o = run_env([sstate, "svself-gen:0.0"], {"SV_GUARD_FORCE_MODE": "tmux-nudge"})
+        check("sv-state.sh refuses to be hand-polled",
+              o.returncode == 9 and "REFUSED" in o.stderr, f"exit={o.returncode}")
+        o = run_env([sstate, "svself-gen:0.0"],
+                    {"SV_GUARD_FORCE_MODE": "tmux-nudge", "SV_WATCHER": "1"})
+        check("sv-state.sh runs under the watcher", o.stdout.strip() == "UNKNOWN", o.stdout.strip())
 
         out = run([sys.executable, os.path.join(HERE, "lib", "sv_detect.py"), "--all"])
         try:

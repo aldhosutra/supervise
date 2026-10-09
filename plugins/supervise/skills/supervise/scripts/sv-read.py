@@ -21,6 +21,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "lib"))
 
 import sv_detect  # noqa: E402
+import sv_guard  # noqa: E402
 
 ADAPTERS = {
     "claude": os.path.join(HERE, "adapters", "claude", "read.py"),
@@ -41,6 +42,13 @@ def main():
     ap.add_argument("--wait-timeout", type=float,
                     default=float(os.environ.get("SV_WAIT_SECONDS", "120")))
     args = ap.parse_args()
+
+    # Same policy as sv-state.sh: reading the record is right, but not as the body
+    # of a busy-poll loop. Allowed for Claude's monitor, for a human caller, once a
+    # watcher is armed, or with an explicit SV_SYNC_OK acknowledgement.
+    rc = sv_guard.enforce("sv-read.py")
+    if rc:
+        sys.exit(rc)
 
     if args.transcript:
         # A transcript path only exists for Claude Code; opencode keeps its

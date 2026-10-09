@@ -31,7 +31,20 @@ NUDGE_URL="${SV_NUDGE_URL:-}"               # supervisor's opencode server; empt
 NUDGE_CONFIRM="${SV_NUDGE_CONFIRM:-8}"
 if [ -n "${SV_NUDGE_URL:-}" ]; then export SV_NUDGE_URL; fi
 
+# This process IS the sanctioned poll. Mark it internal so the policy guard lets
+# the sv-state.sh calls below through, and register it so the guard knows a
+# watcher is armed and alive for these panes.
+export SV_WATCHER=1
+
 (( $# )) || { echo "usage: sv-watch.sh <pane> [pane...]" >&2; exit 64; }
+
+GUARD="$HERE/lib/sv_guard.py"
+if [ -f "$GUARD" ]; then
+  python3 "$GUARD" register --pid $$ --session "${SV_WATCH_SESSION:-sv-watch}" \
+    --panes "$*" >/dev/null 2>&1 || true
+  _sv_unregister() { python3 "$GUARD" unregister --pid $$ >/dev/null 2>&1 || true; }
+  trap '_sv_unregister' EXIT INT TERM
+fi
 
 panes=("$@")
 n=${#panes[@]}

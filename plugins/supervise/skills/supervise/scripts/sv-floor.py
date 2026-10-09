@@ -27,8 +27,11 @@ import sv_detect  # noqa: E402
 
 
 def state_of(pane):
+    # Discovery is sanctioned, not a poll: tell the policy guard to stand down so
+    # sv-floor works before any watcher is armed (it is the pre-arm step).
+    env = dict(os.environ, SV_GUARD="off")
     out = subprocess.run([os.path.join(HERE, "sv-state.sh"), pane],
-                         capture_output=True, text=True)
+                         capture_output=True, text=True, env=env)
     return out.stdout.strip() or "GONE"
 
 
