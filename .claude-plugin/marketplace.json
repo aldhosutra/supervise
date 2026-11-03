@@ -4,11 +4,23 @@
     "name": "Aldo Suhartono Putra",
     "url": "https://github.com/aldhosutra"
   },
+  "metadata": {
+    "description": "Agent skills by aldhosutra. Both aldhosutra/supervise and aldhosutra/loopa publish this same marketplace, so adding either repo gives you every plugin."
+  },
   "plugins": [
     {
       "name": "supervise",
       "source": "./plugins/supervise",
-      "description": "Supervise other Claude Code or opencode sessions running in tmux until their goals are met \u2014 keep them moving, review what they produced, and escalate only what needs a human."
+      "description": "Supervise other Claude Code or opencode sessions running in tmux until their goals are met — keep them moving, review what they produced, and escalate only what needs a human."
+    },
+    {
+      "name": "loopa",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/aldhosutra/loopa.git",
+        "path": "plugins/loopa"
+      },
+      "description": "Loopa (read \"lupa\": forget hand-editing loops). Turn raw footage into many distinct short videos that loop seamlessly in picture and sound: music-first cyclic soundtrack, AI slow motion, 15 viral formats, Indonesian dubbing."
     }
   ]
 }

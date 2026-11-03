@@ -32,6 +32,10 @@ Claude Code can install it as a plugin instead, which `/plugin update` then keep
 /plugin install supervise@aldhosutra
 ```
 
+The `aldhosutra` marketplace also carries my other plugins, such as
+[loopa](https://github.com/aldhosutra/loopa) (`/plugin install loopa@aldhosutra`). Adding either
+repo gives you the same marketplace.
+
 Or in one line, without either:
 
 ```bash
