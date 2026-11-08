@@ -5,7 +5,7 @@
     "url": "https://github.com/aldhosutra"
   },
   "metadata": {
-    "description": "Agent skills by aldhosutra. Both aldhosutra/supervise and aldhosutra/loopa publish this same marketplace, so adding either repo gives you every plugin."
+    "description": "Agent skills by aldhosutra. aldhosutra/supervise, aldhosutra/loopa and aldhosutra/experso all publish this same marketplace, so adding any of the repos gives you every plugin."
   },
   "plugins": [
     {
@@ -21,6 +21,15 @@
         "path": "plugins/loopa"
       },
       "description": "Loopa (read \"lupa\": forget hand-editing loops). Turn raw footage into many distinct short videos that loop seamlessly in picture and sound: music-first cyclic soundtrack, AI slow motion, 15 viral formats, Indonesian dubbing."
+    },
+    {
+      "name": "experso",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/aldhosutra/experso.git",
+        "path": "plugins/experso"
+      },
+      "description": "Expert from persona: turn a creator's public profile into agent skills. Downloads and transcribes their posts, extracts every piece of expertise, plans skills by the output they produce, and writes SKILL.md files with linked references and evidence. Merges overlapping skills across creators, or improves your own."
     }
   ]
 }
