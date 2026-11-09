@@ -5,7 +5,7 @@
     "url": "https://github.com/aldhosutra"
   },
   "metadata": {
-    "description": "Agent skills by aldhosutra. aldhosutra/supervise, aldhosutra/loopa and aldhosutra/experso all publish this same marketplace, so adding any of the repos gives you every plugin."
+    "description": "Agent skills by aldhosutra. aldhosutra/supervise, aldhosutra/loopa, aldhosutra/experso and aldhosutra/decant publish this same marketplace, so adding any of the repos gives you every plugin."
   },
   "plugins": [
     {
@@ -30,6 +30,15 @@
         "path": "plugins/experso"
       },
       "description": "Expert from persona: turn a creator's public profile into agent skills. Downloads and transcribes their posts, extracts every piece of expertise, plans skills by the output they produce, and writes SKILL.md files with linked references and evidence. Merges overlapping skills across creators, or improves your own."
+    },
+    {
+      "name": "decant",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/aldhosutra/decant.git",
+        "path": "plugins/decant"
+      },
+      "description": "Pour a Claude Code session into a resumable OpenCode session, keeping history, tool calls and context, and proving the result in a throwaway OpenCode before touching the real one."
     }
   ]
 }
